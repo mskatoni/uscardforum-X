@@ -1,8 +1,10 @@
 // ==UserScript==
 // @name         uscardforum-X
+// @name:zh-CN   美卡论坛 X
 // @namespace    https://github.com/mskatoni/uscardforum-X
-// @version      0.2.2
-// @description  美卡论坛增强脚本：用户卡服务器端拉黑、Discourse 信任等级升级差距原生统计增强，并支持 Tampermonkey 菜单分模块开关。
+// @version      0.3.0
+// @description  美卡论坛增强脚本：用户卡服务器端拉黑、等级升级差距、Cloudflare Challenge 触发、中英文脚本面板切换。
+// @description:en  US Card Forum enhancer: server-side user ignore, Trust Level gap, Cloudflare Challenge helper, and bilingual script menu.
 // @author       mskatoni
 // @match        https://www.uscardforum.com/*
 // @match        https://uscardforum.com/*
@@ -27,6 +29,8 @@
   const SETTINGS = {
     hardIgnoreEnabled: "hardIgnore.enabled",
     trustLevelEnabled: "trustLevel.enabled",
+    challengeEnabled: "challenge.enabled",
+    language: "ui.language",
   };
 
   function storageKey(key) {
@@ -71,8 +75,12 @@
     }
   }
 
-  function registerToggle(labelWhenOn, labelWhenOff, key, currentValue) {
-    registerMenu(currentValue ? labelWhenOn : labelWhenOff, () => {
+  function toggleLabel(label, enabled) {
+    return enabled ? `✅ ${label}` : label;
+  }
+
+  function registerToggle(label, key, currentValue) {
+    registerMenu(toggleLabel(label, currentValue), () => {
       setSetting(key, !currentValue);
       window.location.reload();
     });
@@ -111,22 +119,96 @@
     return node;
   }
 
+  const TEXTS = {
+    zh: {
+      localeMenu: "中文面板",
+      hardIgnoreMenu: "拉黑用户",
+      trustLevelMenu: "下一级距离",
+      challengeMenu: "Cloudflare盾",
+      forceChallengeMenu: "强制触发Cloudflare盾",
+      alreadyOnChallenge: "已在 Cloudflare Challenge 页面，无需重复跳转。",
+      hardIgnoreButton: (username) => `拉黑 @${username}`,
+      hardIgnoring: "拉黑中...",
+      hardIgnored: (username) => `已拉黑 @${username}`,
+      hardIgnoreStatus: "服务器端 Ignore",
+      noCsrf: "没有找到 CSRF token，确认你已登录美卡论坛后刷新页面。",
+      targetMaintainTl3: "保级 TL3 / 白金会员",
+      targetNextLevel: (level) => `升级到 TL${level}`,
+      currentTl: (level) => `当前 TL${level}`,
+      hiddenRequirement: "隐藏条件",
+      satisfied: "已满足",
+      missing: (value) => `还差 ${value}`,
+      compactMissing: (value) => `，差${value}`,
+      labels: {
+        days_visited: "访问天数",
+        likes_given: "给出点赞",
+        likes_received: "收到点赞",
+        likes_received_users: "获赞用户数",
+        likes_received_days: "获赞分布天数",
+        posts_count: "发帖/回复数",
+        topics_entered: "进入话题",
+        posts_read_count: "阅读帖子",
+        replies_to_different_topics: "回复不同话题",
+        topics_replied_to: "回复不同话题",
+        time_read: "阅读时长",
+      },
+      minutes: "分钟",
+      hours: "小时",
+      minutesShort: "分",
+    },
+    en: {
+      localeMenu: "English Panel",
+      hardIgnoreMenu: "Block Users",
+      trustLevelMenu: "Next-Level Gap",
+      challengeMenu: "Cloudflare Shield",
+      forceChallengeMenu: "Force Cloudflare Shield",
+      alreadyOnChallenge: "Already on the Cloudflare Challenge page.",
+      hardIgnoreButton: (username) => `Ignore @${username}`,
+      hardIgnoring: "Ignoring...",
+      hardIgnored: (username) => `Ignored @${username}`,
+      hardIgnoreStatus: "Server-side Ignore",
+      noCsrf: "CSRF token not found. Make sure you are logged in and refresh the page.",
+      targetMaintainTl3: "Maintain TL3",
+      targetNextLevel: (level) => `Upgrade to TL${level}`,
+      currentTl: (level) => `Current TL${level}`,
+      hiddenRequirement: "Hidden requirement",
+      satisfied: "Satisfied",
+      missing: (value) => `missing ${value}`,
+      compactMissing: (value) => `, -${value}`,
+      labels: {
+        days_visited: "Days Visited",
+        likes_given: "Likes Given",
+        likes_received: "Likes Received",
+        likes_received_users: "Unique Likers",
+        likes_received_days: "Like Days",
+        posts_count: "Posts",
+        topics_entered: "Topics Viewed",
+        posts_read_count: "Posts Read",
+        replies_to_different_topics: "Topics Replied",
+        topics_replied_to: "Topics Replied",
+        time_read: "Read Time",
+      },
+      minutes: "min",
+      hours: "h",
+      minutesShort: "m",
+    },
+  };
+
   const legacyHardIgnoreEnabled = getSetting("enabled", true);
   const hardIgnoreEnabled = getSetting(SETTINGS.hardIgnoreEnabled, legacyHardIgnoreEnabled);
   const trustLevelEnabled = getSetting(SETTINGS.trustLevelEnabled, true);
+  const challengeEnabled = getSetting(SETTINGS.challengeEnabled, true);
+  const language = getSetting(SETTINGS.language, "zh") === "en" ? "en" : "zh";
+  const T = TEXTS[language];
 
-  registerToggle(
-    "关闭用户卡硬拉黑按钮",
-    "开启用户卡硬拉黑按钮",
-    SETTINGS.hardIgnoreEnabled,
-    hardIgnoreEnabled,
-  );
-  registerToggle(
-    "关闭等级升级差距模块",
-    "开启等级升级差距模块",
-    SETTINGS.trustLevelEnabled,
-    trustLevelEnabled,
-  );
+  registerToggle(T.hardIgnoreMenu, SETTINGS.hardIgnoreEnabled, hardIgnoreEnabled);
+  registerToggle(T.trustLevelMenu, SETTINGS.trustLevelEnabled, trustLevelEnabled);
+  registerToggle(T.challengeMenu, SETTINGS.challengeEnabled, challengeEnabled);
+  registerMenu(T.forceChallengeMenu, () => ChallengeModule.forceChallenge({ enableModule: true }));
+  registerMenu(toggleLabel(T.localeMenu, true), () => {
+    setSetting(SETTINGS.language, language === "zh" ? "en" : "zh");
+    window.location.reload();
+  });
 
   function getCsrfToken() {
     return document.querySelector('meta[name="csrf-token"]')?.content || "";
@@ -250,7 +332,7 @@
     async hardIgnore(username) {
       const csrf = getCsrfToken();
       if (!csrf) {
-        throw new Error("没有找到 CSRF token，确认你已登录美卡论坛后刷新页面。");
+        throw new Error(T.noCsrf);
       }
 
       const response = await fetch(`/u/${encodeURIComponent(username)}/notification_level.json`, {
@@ -290,11 +372,11 @@
       const button = el("button", {
         type: "button",
         class: this.buttonClass,
-        text: `拉黑 @${username}`,
+        text: T.hardIgnoreButton(username),
       });
       const status = el("span", {
         class: "uscf-hard-ignore-status",
-        text: "服务器端 Ignore",
+        text: T.hardIgnoreStatus,
       });
 
       button.addEventListener("click", async (event) => {
@@ -302,16 +384,16 @@
         event.stopPropagation();
 
         button.disabled = true;
-        button.textContent = "拉黑中...";
+        button.textContent = T.hardIgnoring;
         status.textContent = "";
 
         try {
           await this.hardIgnore(username);
-          button.textContent = `已拉黑 @${username}`;
-          status.textContent = "成功";
+          button.textContent = T.hardIgnored(username);
+          status.textContent = T.satisfied;
         } catch (error) {
           button.disabled = false;
-          button.textContent = `拉黑 @${username}`;
+          button.textContent = T.hardIgnoreButton(username);
           status.textContent = String(error.message || error);
         }
       });
@@ -319,6 +401,140 @@
       row.append(button, status);
       insertionPoint.appendChild(row);
       card.dataset.uscfHardIgnoreReady = "1";
+    },
+  };
+
+  const ChallengeModule = {
+    challengePath: "/challenge",
+    notFoundGuardKey: `${STORAGE_PREFIX}:challenge.notFoundGuardTs`,
+    observer: null,
+    observerTimer: null,
+    dialogSelectors: [".dialog-body", ".modal-body", ".d-modal__body"],
+    errorTexts: [
+      "403 error",
+      "该回应是很久以前创建的",
+      "reaction was created too long ago",
+      "我们无法加载该话题",
+      "You are not allowed to react",
+    ],
+
+    init() {
+      if (this.isChallengePage()) {
+        if (this.isNotFoundPage()) {
+          this.redirectFromNotFoundPage();
+        }
+        return;
+      }
+      if (this.checkAndRedirect()) return;
+      this.startObserver();
+    },
+
+    isChallengePage() {
+      return location.pathname.startsWith(this.challengePath);
+    },
+
+    isNotFoundPage() {
+      return Boolean(document.querySelector(".page-not-found"));
+    },
+
+    getRedirectParamUrl() {
+      try {
+        const raw = new URLSearchParams(location.search).get("redirect");
+        if (!raw) return "";
+        const url = new URL(raw, location.origin);
+        return url.origin === location.origin ? url.href : "";
+      } catch {
+        return "";
+      }
+    },
+
+    getNotFoundGuardTs() {
+      try {
+        const raw = sessionStorage.getItem(this.notFoundGuardKey);
+        const value = raw ? Number(raw) : 0;
+        return Number.isFinite(value) ? value : 0;
+      } catch {
+        return 0;
+      }
+    },
+
+    setNotFoundGuardTs(value) {
+      try {
+        sessionStorage.setItem(this.notFoundGuardKey, String(value));
+      } catch {
+        // Ignore sessionStorage failures; the redirect still works without guard persistence.
+      }
+    },
+
+    redirectFromNotFoundPage() {
+      const fallback = `${location.origin}/`;
+      const target = this.getRedirectParamUrl() || fallback;
+      const now = Date.now();
+      const guardTs = this.getNotFoundGuardTs();
+      if (guardTs && now - guardTs < 5000) return;
+      this.setNotFoundGuardTs(now);
+      location.replace(target === location.href ? fallback : target);
+    },
+
+    getDialogText() {
+      return this.dialogSelectors
+        .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+        .map((node) => node.textContent || "")
+        .join("\n");
+    },
+
+    isChallengeFailure() {
+      if (this.isChallengePage()) return false;
+      const text = this.getDialogText();
+      if (!text) return false;
+      return this.errorTexts.some((needle) => text.includes(needle));
+    },
+
+    buildChallengeUrl() {
+      const current = location.href;
+      return `${this.challengePath}?redirect=${encodeURIComponent(current)}`;
+    },
+
+    redirectToChallenge() {
+      if (this.isChallengePage()) return;
+      location.assign(this.buildChallengeUrl());
+    },
+
+    forceChallenge(options = {}) {
+      if (options.enableModule) {
+        setSetting(SETTINGS.challengeEnabled, true);
+      }
+      if (this.isChallengePage()) {
+        alert(T.alreadyOnChallenge);
+        return;
+      }
+      this.redirectToChallenge();
+    },
+
+    checkAndRedirect(observer) {
+      if (!this.isChallengeFailure()) return false;
+      observer?.disconnect();
+      this.redirectToChallenge();
+      return true;
+    },
+
+    startObserver() {
+      const root = document.body || document.documentElement;
+      if (!root || this.observer) return;
+      this.observer = new MutationObserver((_, observer) => {
+        if (this.isChallengePage()) {
+          if (this.isNotFoundPage()) {
+            this.redirectFromNotFoundPage();
+          }
+          return;
+        }
+        this.checkAndRedirect(observer);
+      });
+      this.observer.observe(root, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
     },
   };
 
@@ -356,19 +572,7 @@
         topics_replied_to: 10,
       },
     },
-    labels: {
-      days_visited: "访问天数",
-      likes_given: "给出点赞",
-      likes_received: "收到点赞",
-      likes_received_users: "获赞用户数",
-      likes_received_days: "获赞分布天数",
-      posts_count: "发帖/回复数",
-      topics_entered: "进入话题",
-      posts_read_count: "阅读帖子",
-      replies_to_different_topics: "回复不同话题",
-      topics_replied_to: "回复不同话题",
-      time_read: "阅读时长",
-    },
+    labels: T.labels,
     summarySelectors: {
       days_visited: "li.stats-days-visited > div > span > span",
       likes_given: "li.stats-likes-given > a > div > span > span",
@@ -573,7 +777,7 @@
       const trustLevel = Number(directoryItem?.user?.trust_level ?? summary.trustLevel ?? 0);
       const isMaintain = trustLevel >= 3;
       const tierIndex = isMaintain ? 2 : Math.max(0, Math.min(trustLevel, 2));
-      const targetLevel = isMaintain ? "保级 TL3 / 白金会员" : `升级到 TL${trustLevel + 1}`;
+      const targetLevel = isMaintain ? T.targetMaintainTl3 : T.targetNextLevel(trustLevel + 1);
       const requirements = this.cloneRequirements(tierIndex, siteStats);
       const stats = this.mergeStats(summary.stats, directoryItem);
       const unavailableHiddenKeys = new Set();
@@ -623,10 +827,10 @@
     formatValue(key, value) {
       if (key === "time_read") {
         const minutes = Math.round(Number(value || 0) / 60);
-        if (minutes < 60) return `${minutes} 分钟`;
+        if (minutes < 60) return `${minutes} ${T.minutes}`;
         const hours = Math.floor(minutes / 60);
         const rest = minutes % 60;
-        return rest ? `${hours} 小时 ${rest} 分钟` : `${hours} 小时`;
+        return rest ? `${hours} ${T.hours} ${rest} ${T.minutes}` : `${hours} ${T.hours}`;
       }
       return String(Math.round(Number(value || 0)));
     },
@@ -717,11 +921,11 @@
     buildNativeStatTitle(result, item) {
       return [
         `@${result.username}`,
-        `当前 TL${result.trustLevel}`,
-        result.targetLevel,
-        `${item.label}: ${this.formatValue(item.key, item.current)} / ${this.formatValue(item.key, item.need)}`,
-        item.hidden ? "隐藏条件" : "",
-        item.ok ? "已满足" : `还差 ${this.formatValue(item.key, item.missing)}`,
+          T.currentTl(result.trustLevel),
+          result.targetLevel,
+          `${item.label}: ${this.formatValue(item.key, item.current)} / ${this.formatValue(item.key, item.need)}`,
+          item.hidden ? T.hiddenRequirement : "",
+          item.ok ? T.satisfied : T.missing(this.formatValue(item.key, item.missing)),
       ]
         .filter(Boolean)
         .join(" · ");
@@ -729,16 +933,16 @@
 
     formatNativeStatText(item) {
       const base = `${this.formatNativeValue(item.key, item.current)}/${this.formatNativeValue(item.key, item.need)}`;
-      return item.ok ? base : `${base}，差${this.formatNativeValue(item.key, item.missing)}`;
+      return item.ok ? base : `${base}${T.compactMissing(this.formatNativeValue(item.key, item.missing))}`;
     },
 
     formatNativeValue(key, value) {
       if (key === "time_read") {
         const minutes = Math.round(Number(value || 0) / 60);
-        if (minutes < 60) return `${minutes}分钟`;
+        if (minutes < 60) return `${minutes}${T.minutes}`;
         const hours = Math.floor(minutes / 60);
         const rest = minutes % 60;
-        return rest ? `${hours}小时${rest}分` : `${hours}小时`;
+        return rest ? `${hours}${T.hours}${rest}${T.minutesShort}` : `${hours}${T.hours}`;
       }
       return String(Math.round(Number(value || 0)));
     },
@@ -746,6 +950,10 @@
 
   if (hardIgnoreEnabled) {
     HardIgnoreModule.init();
+  }
+
+  if (challengeEnabled) {
+    ChallengeModule.init();
   }
 
   if (trustLevelEnabled) {

@@ -1,106 +1,110 @@
 # uscardforum-X
 
-Private userscript for [uscardforum.com](https://www.uscardforum.com/).
+[中文说明](./README.zh-CN.md)
 
-> This repository is intended for private use under `mskatoni/uscardforum-X`.
+Private userscript for [US Card Forum](https://www.uscardforum.com/).
 
-## Features
+[![GitHub stars](https://img.shields.io/github/stars/mskatoni/uscardforum-X?style=social)](https://github.com/mskatoni/uscardforum-X/stargazers)
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/license-CC--BY--NC--SA--4.0-lightgrey.svg)](./LICENSE)
 
-- Adds a `拉黑 @username` button to Discourse user cards on US Card Forum.
-- Uses Discourse's server-side Ignore endpoint instead of only hiding content locally.
-- Shows Discourse Trust Level upgrade/retention gaps from forum JSON APIs.
-- Stores per-module switches in Tampermonkey's own script menu.
-- Does not add a separate settings panel to the forum page.
-- Does not send data to any third-party server.
+> This repository is currently private. GitHub star badges and Star History charts may only render after the repository is public or visible to the viewer.
+
+## Introduction
+
+`uscardforum-X` is a focused Tampermonkey userscript for US Card Forum. It keeps the forum UI mostly native while adding a few practical Discourse helpers:
+
+- server-side Ignore from user cards
+- Trust Level upgrade or retention gap shown inside native profile stats
+- Cloudflare Challenge helper and manual trigger
+- Chinese/English script menu switching
 
 ## Modules
 
-| Module | Auto-active page/scope | Tampermonkey menu |
+| Module | What it does | Scope |
 | --- | --- | --- |
-| Hard Ignore | Only arms a short user-card observer after avatar/profile-link clicks | `关闭/开启用户卡硬拉黑按钮` |
-| Trust Level Progress | Rewrites native stats on `/u/{username}/summary` only | `关闭/开启等级升级差距模块` |
+| Block Users | Adds an Ignore button to Discourse user cards | Topic/user-card interactions only |
+| Next-Level Gap | Rewrites native profile summary stats as `current/target` | `/u/{username}/summary` only |
+| Cloudflare Shield | Redirects known 403/reaction failure dialogs to `/challenge` | Watches Discourse dialogs |
+| English Panel / 中文面板 | Switches this userscript's own menu/button text | Tampermonkey menu |
 
-The Trust Level module does not fetch data on every topic page. It only changes the forum's original stats on profile summary pages, for example `72/50` on `访问天数`. Hidden TL3 checks are appended as native-looking stat items when the forum API allows them.
+Enabled modules are marked with a green check in Tampermonkey's menu, for example:
+
+```text
+✅ Block Users
+✅ Next-Level Gap
+✅ Cloudflare Shield
+✅ English Panel
+Force Cloudflare Shield
+```
 
 ## Install
 
-1. Open `userscript/uscardforum-X.user.js`.
-2. Copy the full file into Tampermonkey as a new script.
-3. Save and refresh US Card Forum.
+1. Open [`userscript/uscardforum-X.user.js`](./userscript/uscardforum-X.user.js).
+2. Copy the whole file into Tampermonkey as a new script.
+3. Save the script and refresh US Card Forum.
 
 Because this is a private repository, `@downloadURL` and `@updateURL` are intentionally omitted.
 
 ## Usage
 
-### Hard Ignore
+### Block Users
 
-1. Log in to US Card Forum.
-2. Open any topic page.
-3. Click a user's avatar or username to open the user card.
-4. Click `拉黑 @username`.
+Open a user card by clicking an avatar or username, then click `拉黑 @username` / `Ignore @username`.
 
-The script calls:
+The script calls Discourse's server-side Ignore endpoint:
 
 ```http
 PUT /u/{username}/notification_level.json
 ```
 
-with:
+### Next-Level Gap
 
-```json
-{
-  "notification_level": "ignore",
-  "expiring_at": "2099-12-31T00:00:00Z"
-}
-```
-
-### Trust Level Progress
-
-On profile summary pages like:
+Open a profile summary page:
 
 ```text
 https://www.uscardforum.com/u/{username}/summary
 ```
 
-the module does not add a separate panel. It rewrites matching native stat numbers as `current/target` and uses color to show whether the item is satisfied.
+The script rewrites native stats such as:
 
-For TL3/white-gold checks, it also appends native-looking stat items when available:
-
-- `获赞用户数`
-- `获赞分布天数`
-- `回复不同话题`
-
-The module reads:
-
-```http
-GET /about.json
-GET /u/{username}/summary.json
-GET /directory_items?period=quarterly&order=days_visited&name={username}
-GET /user_actions.json?username={username}&filter={filter}&offset={offset}&limit={limit}
+```text
+72/50 访问天数
+1992/500 浏览的话题
+16/5 获赞用户数 *
+6/7，差1 获赞分布天数 *
+14/10 回复不同话题 *
 ```
 
-## Toggle
+Hidden TL3 checks are appended as native-looking stats when `user_actions.json` is accessible.
 
-Open Tampermonkey's script menu on US Card Forum:
+### Cloudflare Shield
 
-- `关闭用户卡硬拉黑按钮`
-- `开启用户卡硬拉黑按钮`
-- `关闭等级升级差距模块`
-- `开启等级升级差距模块`
+The automatic module watches for known Discourse failure dialogs such as reaction/403 failures and redirects to:
 
-Changing the switch reloads the current page.
+```text
+/challenge?redirect={current_page}
+```
+
+The Tampermonkey menu item `Force Cloudflare Shield` / `强制触发Cloudflare盾` immediately enables the module and redirects to the Challenge page.
+
+## Star Trend
+
+Public Star History chart:
+
+[![Star History Chart](https://api.star-history.com/svg?repos=mskatoni/uscardforum-X&type=Date)](https://star-history.com/#mskatoni/uscardforum-X&Date)
+
+For a private repository, GitHub and Star History may not be able to read the star data.
 
 ## Notes
 
-- The script uses the current browser login session and CSRF token.
-- If the request returns `403`, the forum account may not have permission to ignore that user, or the target user may be protected by site rules.
-- The action is server-side Ignore. It is not the same as a local CSS hide/filter rule.
-- Trust Level progress is an estimate. Some Discourse requirements are not fully exposed by public APIs.
-- TL3/white-gold dynamic thresholds use forum stats from `/about.json`; hidden checks use visible user action history where the forum permits it.
+- The script uses the current browser session and CSRF token.
+- It does not send data to third-party servers.
+- Trust Level values are best-effort estimates based on Discourse JSON APIs.
+- Some hidden TL3 checks depend on data that the forum may not expose to every account.
 
 ## Credits
 
-- Trust Level API/interface design is based on the MIT-licensed [lupohan44/Discourse-Trust-Level-Progress](https://github.com/lupohan44/Discourse-Trust-Level-Progress).
+- Trust Level endpoint and requirement mapping are based on the MIT-licensed [lupohan44/Discourse-Trust-Level-Progress](https://github.com/lupohan44/Discourse-Trust-Level-Progress).
 - US Card Forum discussion: [魔改了个论坛脚本，能看 TL(TrustLevel) 升级进度](https://www.uscardforum.com/t/topic/397611).
 
 ## License

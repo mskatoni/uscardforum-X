@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- Rename Tampermonkey menu entries to short module names.
+- Show enabled modules with a green check mark, such as `✅ 拉黑用户`.
+- Add Cloudflare Challenge helper module.
+- Add `强制触发Cloudflare盾` / `Force Cloudflare Shield` menu command.
+- Add Chinese/English script menu switching.
+- Add bilingual README files and Star History section.
+
 ## 0.2.2
 
 - Add TL3 hidden checks back as native-looking summary stats.
