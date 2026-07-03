@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+- Change `Cloudflare盾` / `Cloudflare Shield` to a one-time Challenge trigger without a green check mark.
+- Keep `自动阅读` / `Auto Read` as the persistent toggle that shows enabled state with a green check mark.
+- Update bilingual docs to reflect the corrected menu semantics.
+
 ## 0.4.0
 
 - Add the Auto Read module, disabled by default and exposed only through the Tampermonkey menu.

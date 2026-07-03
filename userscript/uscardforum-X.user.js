@@ -2,7 +2,7 @@
 // @name         uscardforum-X
 // @name:zh-CN   美卡论坛 X
 // @namespace    https://github.com/mskatoni/uscardforum-X
-// @version      0.4.0
+// @version      0.4.1
 // @description  美卡论坛增强脚本：用户卡服务器端拉黑、等级升级差距、Cloudflare Challenge 触发、自动阅读、中英文脚本面板切换。
 // @description:en  US Card Forum enhancer: server-side user ignore, Trust Level gap, Cloudflare Challenge helper, Auto Read, and bilingual script menu.
 // @author       mskatoni
@@ -29,7 +29,6 @@
   const SETTINGS = {
     hardIgnoreEnabled: "hardIgnore.enabled",
     trustLevelEnabled: "trustLevel.enabled",
-    challengeEnabled: "challenge.enabled",
     autoReadEnabled: "autoRead.enabled",
     language: "ui.language",
   };
@@ -126,7 +125,6 @@
       hardIgnoreMenu: "拉黑用户",
       trustLevelMenu: "下一级距离",
       challengeMenu: "Cloudflare盾",
-      forceChallengeMenu: "强制触发Cloudflare盾",
       autoReadMenu: "自动阅读",
       alreadyOnChallenge: "已在 Cloudflare Challenge 页面，无需重复跳转。",
       hardIgnoreButton: (username) => `拉黑 @${username}`,
@@ -163,7 +161,6 @@
       hardIgnoreMenu: "Block Users",
       trustLevelMenu: "Next-Level Gap",
       challengeMenu: "Cloudflare Shield",
-      forceChallengeMenu: "Force Cloudflare Shield",
       autoReadMenu: "Auto Read",
       alreadyOnChallenge: "Already on the Cloudflare Challenge page.",
       hardIgnoreButton: (username) => `Ignore @${username}`,
@@ -200,21 +197,13 @@
   const legacyHardIgnoreEnabled = getSetting("enabled", true);
   const hardIgnoreEnabled = getSetting(SETTINGS.hardIgnoreEnabled, legacyHardIgnoreEnabled);
   const trustLevelEnabled = getSetting(SETTINGS.trustLevelEnabled, true);
-  const challengeEnabled = getSetting(SETTINGS.challengeEnabled, true);
   const autoReadEnabled = getSetting(SETTINGS.autoReadEnabled, false);
   const language = getSetting(SETTINGS.language, "zh") === "en" ? "en" : "zh";
   const T = TEXTS[language];
 
   registerToggle(T.hardIgnoreMenu, SETTINGS.hardIgnoreEnabled, hardIgnoreEnabled);
   registerToggle(T.trustLevelMenu, SETTINGS.trustLevelEnabled, trustLevelEnabled);
-  registerMenu(challengeEnabled ? toggleLabel(T.challengeMenu, true) : T.forceChallengeMenu, () => {
-    if (challengeEnabled) {
-      setSetting(SETTINGS.challengeEnabled, false);
-      window.location.reload();
-      return;
-    }
-    ChallengeModule.forceChallenge({ enableModule: true });
-  });
+  registerMenu(T.challengeMenu, () => ChallengeModule.forceChallenge());
   registerToggle(T.autoReadMenu, SETTINGS.autoReadEnabled, autoReadEnabled);
   registerMenu(toggleLabel(T.localeMenu, true), () => {
     setSetting(SETTINGS.language, language === "zh" ? "en" : "zh");
@@ -511,10 +500,7 @@
       location.assign(this.buildChallengeUrl());
     },
 
-    forceChallenge(options = {}) {
-      if (options.enableModule) {
-        setSetting(SETTINGS.challengeEnabled, true);
-      }
+    forceChallenge() {
       if (this.isChallengePage()) {
         alert(T.alreadyOnChallenge);
         return;
@@ -1250,8 +1236,8 @@
     HardIgnoreModule.init();
   }
 
-  if (challengeEnabled) {
-    ChallengeModule.init();
+  if (ChallengeModule.isChallengePage() && ChallengeModule.isNotFoundPage()) {
+    ChallengeModule.redirectFromNotFoundPage();
   }
 
   if (trustLevelEnabled) {
