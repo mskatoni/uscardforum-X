@@ -2,12 +2,13 @@
 
 [English README](./README.md)
 
-面向 [美卡论坛](https://www.uscardforum.com/) 的私有 Tampermonkey 用户脚本。
+面向 [美卡论坛](https://www.uscardforum.com/) 的公开 Tampermonkey 用户脚本。
 
 [![GitHub stars](https://img.shields.io/github/stars/mskatoni/uscardforum-X?style=social)](https://github.com/mskatoni/uscardforum-X/stargazers)
+[![Greasy Fork](https://img.shields.io/badge/Greasy%20Fork-uscardforum--X-670000)](https://greasyfork.org/en/scripts/585437-uscardforum-x)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/license-CC--BY--NC--SA--4.0-lightgrey.svg)](./LICENSE)
 
-> 当前仓库是私有仓库。GitHub Star 徽章和 Star History 图表可能只有仓库公开或访问者有权限时才会显示。
+Greasy Fork 安装地址：[uscardforum-X](https://greasyfork.org/en/scripts/585437-uscardforum-x)。
 
 ## 脚本介绍
 
@@ -41,11 +42,17 @@ Cloudflare盾
 
 ## 安装方式
 
-1. 打开 [`userscript/uscardforum-X.user.js`](./userscript/uscardforum-X.user.js)。
-2. 复制完整内容，新建到 Tampermonkey/油猴脚本里。
-3. 保存并刷新美卡论坛页面。
+推荐方式：
 
-因为这是私有仓库，脚本没有写 `@downloadURL` 和 `@updateURL`。
+1. 安装 Tampermonkey、Violentmonkey 等用户脚本管理器。
+2. 打开 Greasy Fork 页面：[uscardforum-X](https://greasyfork.org/en/scripts/585437-uscardforum-x)。
+3. 点击 `Install this script`，在脚本管理器里确认安装，然后刷新美卡论坛页面。
+
+手动备用：
+
+1. 打开 [`userscript/uscardforum-X.user.js`](./userscript/uscardforum-X.user.js)。
+2. 复制完整内容，新建到 Tampermonkey/Violentmonkey 里。
+3. 保存并刷新美卡论坛页面。
 
 ## 使用方式
 
@@ -100,8 +107,6 @@ https://www.uscardforum.com/u/{username}/summary
 Star History：
 
 [![Star History Chart](https://api.star-history.com/svg?repos=mskatoni/uscardforum-X&type=Date)](https://star-history.com/#mskatoni/uscardforum-X&Date)
-
-私有仓库状态下，GitHub/Star History 可能无法读取 star 数据；公开后会自动显示。
 
 ## 注意
 

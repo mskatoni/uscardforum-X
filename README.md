@@ -2,12 +2,13 @@
 
 [中文说明](./README.zh-CN.md)
 
-Private userscript for [US Card Forum](https://www.uscardforum.com/).
+Public userscript for [US Card Forum](https://www.uscardforum.com/).
 
 [![GitHub stars](https://img.shields.io/github/stars/mskatoni/uscardforum-X?style=social)](https://github.com/mskatoni/uscardforum-X/stargazers)
+[![Greasy Fork](https://img.shields.io/badge/Greasy%20Fork-uscardforum--X-670000)](https://greasyfork.org/en/scripts/585437-uscardforum-x)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/license-CC--BY--NC--SA--4.0-lightgrey.svg)](./LICENSE)
 
-> This repository is currently private. GitHub star badges and Star History charts may only render after the repository is public or visible to the viewer.
+Install from Greasy Fork: [uscardforum-X](https://greasyfork.org/en/scripts/585437-uscardforum-x).
 
 ## Introduction
 
@@ -41,11 +42,17 @@ Auto Read
 
 ## Install
 
-1. Open [`userscript/uscardforum-X.user.js`](./userscript/uscardforum-X.user.js).
-2. Copy the whole file into Tampermonkey as a new script.
-3. Save the script and refresh US Card Forum.
+Recommended:
 
-Because this is a private repository, `@downloadURL` and `@updateURL` are intentionally omitted.
+1. Install a userscript manager such as Tampermonkey or Violentmonkey.
+2. Open [uscardforum-X on Greasy Fork](https://greasyfork.org/en/scripts/585437-uscardforum-x).
+3. Click `Install this script`, confirm in your userscript manager, then refresh US Card Forum.
+
+Manual fallback:
+
+1. Open [`userscript/uscardforum-X.user.js`](./userscript/uscardforum-X.user.js).
+2. Copy the whole file into Tampermonkey/Violentmonkey as a new script.
+3. Save the script and refresh US Card Forum.
 
 ## Usage
 
@@ -100,8 +107,6 @@ The module has no floating controls. It scrolls topic pages about 20% slower tha
 Public Star History chart:
 
 [![Star History Chart](https://api.star-history.com/svg?repos=mskatoni/uscardforum-X&type=Date)](https://star-history.com/#mskatoni/uscardforum-X&Date)
-
-For a private repository, GitHub and Star History may not be able to read the star data.
 
 ## Notes
 
