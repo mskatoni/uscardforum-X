@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1
+
+- Change profile summary enhancement to native stat replacement only.
+- Remove the inline Trust Level summary panel from `/u/{username}/summary`.
+- Remove the manual Trust Level modal entry and clean up legacy panel nodes.
+- Stop querying hidden user action checks that cannot be rendered in native summary stats.
+- Use compact `current/target` formatting such as `72/50`.
+
 ## 0.2.0
 
 - Add Trust Level upgrade/retention gap module.

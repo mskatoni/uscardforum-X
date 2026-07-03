@@ -18,9 +18,9 @@ Private userscript for [uscardforum.com](https://www.uscardforum.com/).
 | Module | Auto-active page/scope | Tampermonkey menu |
 | --- | --- | --- |
 | Hard Ignore | Only arms a short user-card observer after avatar/profile-link clicks | `关闭/开启用户卡硬拉黑按钮` |
-| Trust Level Progress | Auto-enhances `/u/{username}/summary` only | `查看等级升级差距`, `关闭/开启等级升级差距模块` |
+| Trust Level Progress | Rewrites native stats on `/u/{username}/summary` only | `关闭/开启等级升级差距模块` |
 
-The Trust Level module does not fetch data on every topic page. Outside profile summary pages, it only runs after the menu command is clicked.
+The Trust Level module does not fetch data on every topic page. It only changes the forum's original stats on profile summary pages, for example `72/50` on `访问天数`.
 
 ## Install
 
@@ -56,27 +56,21 @@ with:
 
 ### Trust Level Progress
 
-Open Tampermonkey's script menu on US Card Forum and click `查看等级升级差距`.
-
 On profile summary pages like:
 
 ```text
 https://www.uscardforum.com/u/{username}/summary
 ```
 
-the module also adds an inline progress panel and paints matching native stats as `current / target`.
+the module does not add a separate panel. It rewrites matching native stat numbers as `current/target` and uses color to show whether the item is satisfied.
 
 The module reads:
 
 ```http
-GET /session/current.json
 GET /about.json
 GET /u/{username}/summary.json
 GET /directory_items?period=quarterly&order=days_visited&name={username}
-GET /user_actions.json?username={username}&filter={filter}&offset={offset}&limit={limit}
 ```
-
-`user_actions.json` is only used for TL3/white-gold hidden checks, including unique likers, like-days spread, and distinct topics replied.
 
 ## Toggle
 
@@ -86,7 +80,6 @@ Open Tampermonkey's script menu on US Card Forum:
 - `开启用户卡硬拉黑按钮`
 - `关闭等级升级差距模块`
 - `开启等级升级差距模块`
-- `查看等级升级差距`
 
 Changing the switch reloads the current page.
 
@@ -96,7 +89,7 @@ Changing the switch reloads the current page.
 - If the request returns `403`, the forum account may not have permission to ignore that user, or the target user may be protected by site rules.
 - The action is server-side Ignore. It is not the same as a local CSS hide/filter rule.
 - Trust Level progress is an estimate. Some Discourse requirements are not fully exposed by public APIs.
-- TL3/white-gold dynamic thresholds use forum stats from `/about.json`; hidden checks use visible user action history where available.
+- TL3/white-gold dynamic thresholds use forum stats from `/about.json`; hidden checks that have no native summary stat are intentionally not rendered.
 
 ## Credits
 
