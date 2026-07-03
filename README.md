@@ -8,9 +8,19 @@ Private userscript for [uscardforum.com](https://www.uscardforum.com/).
 
 - Adds a `拉黑 @username` button to Discourse user cards on US Card Forum.
 - Uses Discourse's server-side Ignore endpoint instead of only hiding content locally.
-- Stores an on/off switch in Tampermonkey's own script menu.
+- Shows Discourse Trust Level upgrade/retention gaps from forum JSON APIs.
+- Stores per-module switches in Tampermonkey's own script menu.
 - Does not add a separate settings panel to the forum page.
 - Does not send data to any third-party server.
+
+## Modules
+
+| Module | Auto-active page/scope | Tampermonkey menu |
+| --- | --- | --- |
+| Hard Ignore | Only arms a short user-card observer after avatar/profile-link clicks | `关闭/开启用户卡硬拉黑按钮` |
+| Trust Level Progress | Auto-enhances `/u/{username}/summary` only | `查看等级升级差距`, `关闭/开启等级升级差距模块` |
+
+The Trust Level module does not fetch data on every topic page. Outside profile summary pages, it only runs after the menu command is clicked.
 
 ## Install
 
@@ -21,6 +31,8 @@ Private userscript for [uscardforum.com](https://www.uscardforum.com/).
 Because this is a private repository, `@downloadURL` and `@updateURL` are intentionally omitted.
 
 ## Usage
+
+### Hard Ignore
 
 1. Log in to US Card Forum.
 2. Open any topic page.
@@ -42,12 +54,39 @@ with:
 }
 ```
 
+### Trust Level Progress
+
+Open Tampermonkey's script menu on US Card Forum and click `查看等级升级差距`.
+
+On profile summary pages like:
+
+```text
+https://www.uscardforum.com/u/{username}/summary
+```
+
+the module also adds an inline progress panel and paints matching native stats as `current / target`.
+
+The module reads:
+
+```http
+GET /session/current.json
+GET /about.json
+GET /u/{username}/summary.json
+GET /directory_items?period=quarterly&order=days_visited&name={username}
+GET /user_actions.json?username={username}&filter={filter}&offset={offset}&limit={limit}
+```
+
+`user_actions.json` is only used for TL3/white-gold hidden checks, including unique likers, like-days spread, and distinct topics replied.
+
 ## Toggle
 
 Open Tampermonkey's script menu on US Card Forum:
 
 - `关闭用户卡硬拉黑按钮`
 - `开启用户卡硬拉黑按钮`
+- `关闭等级升级差距模块`
+- `开启等级升级差距模块`
+- `查看等级升级差距`
 
 Changing the switch reloads the current page.
 
@@ -56,7 +95,16 @@ Changing the switch reloads the current page.
 - The script uses the current browser login session and CSRF token.
 - If the request returns `403`, the forum account may not have permission to ignore that user, or the target user may be protected by site rules.
 - The action is server-side Ignore. It is not the same as a local CSS hide/filter rule.
+- Trust Level progress is an estimate. Some Discourse requirements are not fully exposed by public APIs.
+- TL3/white-gold dynamic thresholds use forum stats from `/about.json`; hidden checks use visible user action history where available.
+
+## Credits
+
+- Trust Level API/interface design is based on the MIT-licensed [lupohan44/Discourse-Trust-Level-Progress](https://github.com/lupohan44/Discourse-Trust-Level-Progress).
+- US Card Forum discussion: [魔改了个论坛脚本，能看 TL(TrustLevel) 升级进度](https://www.uscardforum.com/t/topic/397611).
 
 ## License
 
 CC BY-NC-SA 4.0. See [LICENSE](./LICENSE).
+
+Third-party notices are recorded in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
