@@ -110,13 +110,6 @@ Star History：
 - 等级进度是基于 Discourse JSON API 的近似估算。
 - 部分 TL3 隐藏条件取决于论坛是否允许当前账号读取对应动作历史。
 
-## 鸣谢
-
-- TL 接口和条件映射参考 MIT 授权项目：[lupohan44/Discourse-Trust-Level-Progress](https://github.com/lupohan44/Discourse-Trust-Level-Progress)。
-- 美卡论坛讨论：[魔改了个论坛脚本，能看 TL(TrustLevel) 升级进度](https://www.uscardforum.com/t/topic/397611)。
-
 ## 许可证
 
 CC BY-NC-SA 4.0，见 [LICENSE](./LICENSE)。
-
-第三方声明见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。

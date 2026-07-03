@@ -110,13 +110,6 @@ For a private repository, GitHub and Star History may not be able to read the st
 - Trust Level values are best-effort estimates based on Discourse JSON APIs.
 - Some hidden TL3 checks depend on data that the forum may not expose to every account.
 
-## Credits
-
-- Trust Level endpoint and requirement mapping are based on the MIT-licensed [lupohan44/Discourse-Trust-Level-Progress](https://github.com/lupohan44/Discourse-Trust-Level-Progress).
-- US Card Forum discussion: [魔改了个论坛脚本，能看 TL(TrustLevel) 升级进度](https://www.uscardforum.com/t/topic/397611).
-
 ## License
 
 CC BY-NC-SA 4.0. See [LICENSE](./LICENSE).
-
-Third-party notices are recorded in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
