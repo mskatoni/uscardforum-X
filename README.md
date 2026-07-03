@@ -20,7 +20,7 @@ Private userscript for [uscardforum.com](https://www.uscardforum.com/).
 | Hard Ignore | Only arms a short user-card observer after avatar/profile-link clicks | `关闭/开启用户卡硬拉黑按钮` |
 | Trust Level Progress | Rewrites native stats on `/u/{username}/summary` only | `关闭/开启等级升级差距模块` |
 
-The Trust Level module does not fetch data on every topic page. It only changes the forum's original stats on profile summary pages, for example `72/50` on `访问天数`.
+The Trust Level module does not fetch data on every topic page. It only changes the forum's original stats on profile summary pages, for example `72/50` on `访问天数`. Hidden TL3 checks are appended as native-looking stat items when the forum API allows them.
 
 ## Install
 
@@ -64,12 +64,19 @@ https://www.uscardforum.com/u/{username}/summary
 
 the module does not add a separate panel. It rewrites matching native stat numbers as `current/target` and uses color to show whether the item is satisfied.
 
+For TL3/white-gold checks, it also appends native-looking stat items when available:
+
+- `获赞用户数`
+- `获赞分布天数`
+- `回复不同话题`
+
 The module reads:
 
 ```http
 GET /about.json
 GET /u/{username}/summary.json
 GET /directory_items?period=quarterly&order=days_visited&name={username}
+GET /user_actions.json?username={username}&filter={filter}&offset={offset}&limit={limit}
 ```
 
 ## Toggle
@@ -89,7 +96,7 @@ Changing the switch reloads the current page.
 - If the request returns `403`, the forum account may not have permission to ignore that user, or the target user may be protected by site rules.
 - The action is server-side Ignore. It is not the same as a local CSS hide/filter rule.
 - Trust Level progress is an estimate. Some Discourse requirements are not fully exposed by public APIs.
-- TL3/white-gold dynamic thresholds use forum stats from `/about.json`; hidden checks that have no native summary stat are intentionally not rendered.
+- TL3/white-gold dynamic thresholds use forum stats from `/about.json`; hidden checks use visible user action history where the forum permits it.
 
 ## Credits
 

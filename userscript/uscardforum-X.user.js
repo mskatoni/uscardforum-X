@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         uscardforum-X
 // @namespace    https://github.com/mskatoni/uscardforum-X
-// @version      0.2.1
+// @version      0.2.2
 // @description  美卡论坛增强脚本：用户卡服务器端拉黑、Discourse 信任等级升级差距原生统计增强，并支持 Tampermonkey 菜单分模块开关。
 // @author       mskatoni
 // @match        https://www.uscardforum.com/*
@@ -327,6 +327,7 @@
     routeTimer: null,
     lastSummaryPath: "",
     lastSummaryRun: 0,
+    hiddenPeriodDays: 100,
     requirements: {
       0: {
         topics_entered: 5,
@@ -350,16 +351,22 @@
         posts_count: 10,
         posts_read_count: 20000,
         topics_entered: 500,
+        likes_received_users: 5,
+        likes_received_days: 7,
+        topics_replied_to: 10,
       },
     },
     labels: {
       days_visited: "访问天数",
       likes_given: "给出点赞",
       likes_received: "收到点赞",
+      likes_received_users: "获赞用户数",
+      likes_received_days: "获赞分布天数",
       posts_count: "发帖/回复数",
       topics_entered: "进入话题",
       posts_read_count: "阅读帖子",
       replies_to_different_topics: "回复不同话题",
+      topics_replied_to: "回复不同话题",
       time_read: "阅读时长",
     },
     summarySelectors: {
@@ -370,6 +377,12 @@
       topics_entered: "li.stats-topics-entered > div > span > span",
       posts_read_count: "li.stats-posts-read > div > span > span",
       time_read: "li.stats-time-read > div > span",
+    },
+    hiddenKeys: new Set(["likes_received_users", "likes_received_days", "topics_replied_to"]),
+    extraStatClasses: {
+      likes_received_users: "stats-likes-received-users",
+      likes_received_days: "stats-likes-received-days",
+      topics_replied_to: "stats-topics-replied-to",
     },
 
     init() {
@@ -392,6 +405,14 @@
         }
         .uscf-tl-native-missing {
           color: #c62828 !important;
+        }
+        .uscf-tl-extra-stat .uscf-tl-hidden-mark {
+          color: #b26a00;
+          font-weight: 700;
+          margin-right: 3px;
+        }
+        .uscf-tl-extra-stat .value .number {
+          white-space: nowrap;
         }
       `);
     },
@@ -474,6 +495,45 @@
       );
     },
 
+    async fetchAllActions(username, filter, sinceTs) {
+      const pageSize = 30;
+      const maxPages = 60;
+      const out = [];
+      for (let page = 0; page < maxPages; page += 1) {
+        const offset = page * pageSize;
+        const data = await this.fetchJson(
+          `${this.getApiBase()}/user_actions.json?username=${encodeURIComponent(username)}&filter=${filter}&offset=${offset}&limit=${pageSize}`,
+        );
+        const actions = data?.user_actions || [];
+        if (!actions.length) break;
+
+        let hitCutoff = false;
+        for (const action of actions) {
+          if (Date.parse(action.created_at) < sinceTs) {
+            hitCutoff = true;
+            break;
+          }
+          out.push(action);
+        }
+
+        if (hitCutoff || actions.length < pageSize) break;
+      }
+      return out;
+    },
+
+    async fetchHiddenStats(username) {
+      const sinceTs = Date.now() - this.hiddenPeriodDays * 86400000;
+      const [likesReceived, replies] = await Promise.all([
+        this.fetchAllActions(username, 2, sinceTs),
+        this.fetchAllActions(username, 5, sinceTs),
+      ]);
+      return {
+        likes_received_users: new Set(likesReceived.map((action) => action.acting_username).filter(Boolean)).size,
+        likes_received_days: new Set(likesReceived.map((action) => safeText(action.created_at).slice(0, 10))).size,
+        topics_replied_to: new Set(replies.map((action) => action.topic_id).filter(Boolean)).size,
+      };
+    },
+
     cloneRequirements(tierIndex, siteStats) {
       const req = { ...(this.requirements[tierIndex] || this.requirements[0]) };
       if (tierIndex === 2) {
@@ -516,8 +576,20 @@
       const targetLevel = isMaintain ? "保级 TL3 / 白金会员" : `升级到 TL${trustLevel + 1}`;
       const requirements = this.cloneRequirements(tierIndex, siteStats);
       const stats = this.mergeStats(summary.stats, directoryItem);
+      const unavailableHiddenKeys = new Set();
+
+      if (tierIndex === 2) {
+        try {
+          Object.assign(stats, await this.fetchHiddenStats(username));
+        } catch (error) {
+          console.warn("[uscardforum-X] hidden trust level checks unavailable:", error);
+          this.hiddenKeys.forEach((key) => unavailableHiddenKeys.add(key));
+        }
+      }
 
       const items = Object.entries(requirements).map(([key, need]) => {
+        const hidden = this.hiddenKeys.has(key);
+        const unavailable = hidden && unavailableHiddenKeys.has(key);
         const current = Number(stats[key] ?? 0);
         const ok = current >= Number(need);
         return {
@@ -527,6 +599,8 @@
           need: Number(need),
           ok,
           missing: ok ? 0 : Number(need) - current,
+          hidden,
+          unavailable,
         };
       });
 
@@ -578,27 +652,84 @@
 
     paintNativeSummaryStats(result, retry = 0) {
       let painted = 0;
+      this.removeExtraNativeStats();
+
       for (const item of result.items) {
+        if (item.unavailable) continue;
         const selector = this.summarySelectors[item.key];
-        if (!selector) continue;
+        if (!selector) {
+          if (item.hidden && this.appendExtraNativeStat(result, item)) {
+            painted += 1;
+          }
+          continue;
+        }
         const statNode = document.querySelector(selector);
         if (!statNode) continue;
-        statNode.textContent = `${this.formatNativeValue(item.key, item.current)}/${this.formatNativeValue(item.key, item.need)}`;
+        statNode.textContent = this.formatNativeStatText(item);
         statNode.classList.remove("uscf-tl-native-ok", "uscf-tl-native-missing");
         statNode.classList.add(item.ok ? "uscf-tl-native-ok" : "uscf-tl-native-missing");
-        statNode.title = [
-          `@${result.username}`,
-          `当前 TL${result.trustLevel}`,
-          result.targetLevel,
-          `${item.label}: ${this.formatValue(item.key, item.current)} / ${this.formatValue(item.key, item.need)}`,
-          item.ok ? "已满足" : `还差 ${this.formatValue(item.key, item.missing)}`,
-        ].join(" · ");
+        statNode.title = this.buildNativeStatTitle(result, item);
         painted += 1;
       }
 
       if (painted === 0 && retry < 10) {
         setTimeout(() => this.paintNativeSummaryStats(result, retry + 1), 350);
       }
+    },
+
+    removeExtraNativeStats() {
+      document.querySelectorAll(".uscf-tl-extra-stat").forEach((node) => node.remove());
+    },
+
+    appendExtraNativeStat(result, item) {
+      const extraStats = Array.from(document.querySelectorAll(".uscf-tl-extra-stat"));
+      const anchor =
+        extraStats[extraStats.length - 1] ||
+        document.querySelector("li.stats-likes-received") ||
+        document.querySelector("li.stats-post-count") ||
+        document.querySelector("li[class*='stats-']");
+      const list = anchor?.parentElement;
+      if (!list) return false;
+
+      const number = el("span", {
+        class: `number ${item.ok ? "uscf-tl-native-ok" : "uscf-tl-native-missing"}`,
+        text: this.formatNativeStatText(item),
+        title: this.buildNativeStatTitle(result, item),
+      });
+      const li = el(
+        "li",
+        {
+          class: `${this.extraStatClasses[item.key] || `stats-${item.key.replace(/_/g, "-")}`} uscf-tl-extra-stat`,
+        },
+        el(
+          "div",
+          { class: "user-stat" },
+          el("span", { class: "value" }, number),
+          "\n",
+          el("span", { class: "label" }, item.label, " ", el("span", { class: "uscf-tl-hidden-mark", text: "*" })),
+        ),
+      );
+
+      list.insertBefore(li, anchor.nextSibling);
+      return true;
+    },
+
+    buildNativeStatTitle(result, item) {
+      return [
+        `@${result.username}`,
+        `当前 TL${result.trustLevel}`,
+        result.targetLevel,
+        `${item.label}: ${this.formatValue(item.key, item.current)} / ${this.formatValue(item.key, item.need)}`,
+        item.hidden ? "隐藏条件" : "",
+        item.ok ? "已满足" : `还差 ${this.formatValue(item.key, item.missing)}`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    },
+
+    formatNativeStatText(item) {
+      const base = `${this.formatNativeValue(item.key, item.current)}/${this.formatNativeValue(item.key, item.need)}`;
+      return item.ok ? base : `${base}，差${this.formatNativeValue(item.key, item.missing)}`;
     },
 
     formatNativeValue(key, value) {

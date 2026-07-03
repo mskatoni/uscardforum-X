@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2
+
+- Add TL3 hidden checks back as native-looking summary stats.
+- Append `获赞用户数`, `获赞分布天数`, and `回复不同话题` when `user_actions.json` is accessible.
+
 ## 0.2.1
 
 - Change profile summary enhancement to native stat replacement only.
