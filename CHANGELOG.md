@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Add the Auto Read module, disabled by default and exposed only through the Tampermonkey menu.
+- Slow Auto Read pacing by about 20% compared with the reference script.
+- Keep the menu to five rows by folding the Cloudflare force trigger into the Cloudflare row when the module is disabled.
+- Update bilingual README docs for the new module and Cloudflare menu behavior.
+
 ## 0.3.0
 
 - Rename Tampermonkey menu entries to short module names.

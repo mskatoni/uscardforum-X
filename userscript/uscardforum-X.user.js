@@ -2,9 +2,9 @@
 // @name         uscardforum-X
 // @name:zh-CN   美卡论坛 X
 // @namespace    https://github.com/mskatoni/uscardforum-X
-// @version      0.3.0
-// @description  美卡论坛增强脚本：用户卡服务器端拉黑、等级升级差距、Cloudflare Challenge 触发、中英文脚本面板切换。
-// @description:en  US Card Forum enhancer: server-side user ignore, Trust Level gap, Cloudflare Challenge helper, and bilingual script menu.
+// @version      0.4.0
+// @description  美卡论坛增强脚本：用户卡服务器端拉黑、等级升级差距、Cloudflare Challenge 触发、自动阅读、中英文脚本面板切换。
+// @description:en  US Card Forum enhancer: server-side user ignore, Trust Level gap, Cloudflare Challenge helper, Auto Read, and bilingual script menu.
 // @author       mskatoni
 // @match        https://www.uscardforum.com/*
 // @match        https://uscardforum.com/*
@@ -30,6 +30,7 @@
     hardIgnoreEnabled: "hardIgnore.enabled",
     trustLevelEnabled: "trustLevel.enabled",
     challengeEnabled: "challenge.enabled",
+    autoReadEnabled: "autoRead.enabled",
     language: "ui.language",
   };
 
@@ -126,6 +127,7 @@
       trustLevelMenu: "下一级距离",
       challengeMenu: "Cloudflare盾",
       forceChallengeMenu: "强制触发Cloudflare盾",
+      autoReadMenu: "自动阅读",
       alreadyOnChallenge: "已在 Cloudflare Challenge 页面，无需重复跳转。",
       hardIgnoreButton: (username) => `拉黑 @${username}`,
       hardIgnoring: "拉黑中...",
@@ -162,6 +164,7 @@
       trustLevelMenu: "Next-Level Gap",
       challengeMenu: "Cloudflare Shield",
       forceChallengeMenu: "Force Cloudflare Shield",
+      autoReadMenu: "Auto Read",
       alreadyOnChallenge: "Already on the Cloudflare Challenge page.",
       hardIgnoreButton: (username) => `Ignore @${username}`,
       hardIgnoring: "Ignoring...",
@@ -198,13 +201,21 @@
   const hardIgnoreEnabled = getSetting(SETTINGS.hardIgnoreEnabled, legacyHardIgnoreEnabled);
   const trustLevelEnabled = getSetting(SETTINGS.trustLevelEnabled, true);
   const challengeEnabled = getSetting(SETTINGS.challengeEnabled, true);
+  const autoReadEnabled = getSetting(SETTINGS.autoReadEnabled, false);
   const language = getSetting(SETTINGS.language, "zh") === "en" ? "en" : "zh";
   const T = TEXTS[language];
 
   registerToggle(T.hardIgnoreMenu, SETTINGS.hardIgnoreEnabled, hardIgnoreEnabled);
   registerToggle(T.trustLevelMenu, SETTINGS.trustLevelEnabled, trustLevelEnabled);
-  registerToggle(T.challengeMenu, SETTINGS.challengeEnabled, challengeEnabled);
-  registerMenu(T.forceChallengeMenu, () => ChallengeModule.forceChallenge({ enableModule: true }));
+  registerMenu(challengeEnabled ? toggleLabel(T.challengeMenu, true) : T.forceChallengeMenu, () => {
+    if (challengeEnabled) {
+      setSetting(SETTINGS.challengeEnabled, false);
+      window.location.reload();
+      return;
+    }
+    ChallengeModule.forceChallenge({ enableModule: true });
+  });
+  registerToggle(T.autoReadMenu, SETTINGS.autoReadEnabled, autoReadEnabled);
   registerMenu(toggleLabel(T.localeMenu, true), () => {
     setSetting(SETTINGS.language, language === "zh" ? "en" : "zh");
     window.location.reload();
@@ -535,6 +546,293 @@
         subtree: true,
         characterData: true,
       });
+    },
+  };
+
+  const AutoReadModule = {
+    storagePrefix: `${STORAGE_PREFIX}:autoRead.`,
+    config: {
+      maxTopics: 100,
+      maxPagesPerLoad: 10,
+      maxPostsPerTopic: 1000,
+      scrollStep: 30,
+      scrollInterval: 48,
+      fetchDelay: 600,
+      jumpDelay: 2400,
+      bottomSettleDelay: 2160,
+      startDelay: 1440,
+      maxRetry: 3,
+    },
+    navigating: false,
+    scrollStarted: false,
+    startTimer: 0,
+
+    init() {
+      if (!this.isEnabled()) return;
+      if (this.isTopicPage()) {
+        this.startScroll();
+        return;
+      }
+      if (this.isStartPage()) {
+        clearTimeout(this.startTimer);
+        this.startTimer = setTimeout(() => this.goNext(), this.config.startDelay);
+      }
+    },
+
+    isEnabled() {
+      return getSetting(SETTINGS.autoReadEnabled, false) === true;
+    },
+
+    storeKey(key) {
+      return `${this.storagePrefix}${key}`;
+    },
+
+    storeGet(key) {
+      try {
+        return localStorage.getItem(this.storeKey(key));
+      } catch {
+        return null;
+      }
+    },
+
+    storeSet(key, value) {
+      try {
+        localStorage.setItem(this.storeKey(key), String(value));
+      } catch {
+        // Ignore localStorage failures; the current page can still continue.
+      }
+    },
+
+    storeRemove(key) {
+      try {
+        localStorage.removeItem(this.storeKey(key));
+      } catch {
+        // Ignore localStorage failures.
+      }
+    },
+
+    isTopicPage() {
+      return /^\/t\//i.test(location.pathname);
+    },
+
+    isStartPage() {
+      const path = location.pathname.replace(/\/+$/, "") || "/";
+      return (
+        path === "/" ||
+        /^\/(latest|new|unread|top|categories)(\/|$)/i.test(path) ||
+        /^\/c\//i.test(path)
+      );
+    },
+
+    sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    },
+
+    toPositiveInt(value, fallback = 1) {
+      const number = Number.parseInt(value, 10);
+      return Number.isFinite(number) && number > 0 ? number : fallback;
+    },
+
+    getStoredPage() {
+      const page = Number.parseInt(this.storeGet("page") || "0", 10);
+      return Number.isFinite(page) && page >= 0 ? page : 0;
+    },
+
+    getScrollHeight() {
+      const body = document.body;
+      const root = document.documentElement;
+      return Math.max(
+        body?.scrollHeight || 0,
+        body?.offsetHeight || 0,
+        root?.clientHeight || 0,
+        root?.scrollHeight || 0,
+        root?.offsetHeight || 0,
+      );
+    },
+
+    isAtBottom() {
+      return window.innerHeight + window.scrollY >= this.getScrollHeight() - 120;
+    },
+
+    parseQueue() {
+      try {
+        const queue = JSON.parse(this.storeGet("queue") || "[]");
+        if (!Array.isArray(queue)) throw new Error("queue is not an array");
+        return queue.filter((topic) => topic && Number.isFinite(Number(topic.id)));
+      } catch (error) {
+        console.warn("[uscardforum-X] Auto Read queue is broken, clearing it:", error);
+        this.storeRemove("queue");
+        return [];
+      }
+    },
+
+    async fetchJson(url) {
+      let lastError;
+      for (let i = 0; i < this.config.maxRetry; i += 1) {
+        try {
+          const response = await fetch(url, {
+            credentials: "same-origin",
+            headers: { Accept: "application/json" },
+          });
+          if (response.status === 429) {
+            const retryAfter = Number.parseInt(response.headers.get("Retry-After") || "0", 10);
+            const wait = retryAfter > 0 ? retryAfter * 1000 : 2400 * (i + 1);
+            await this.sleep(wait);
+            continue;
+          }
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.json();
+        } catch (error) {
+          lastError = error;
+          if (i < this.config.maxRetry - 1) await this.sleep(840 * (i + 1));
+        }
+      }
+      throw lastError || new Error("fetch failed");
+    },
+
+    isUsableTopic(topic, seen) {
+      const id = Number(topic?.id);
+      if (!Number.isFinite(id) || seen.has(id)) return false;
+      if (Number(topic.posts_count || 0) >= this.config.maxPostsPerTopic) return false;
+      return true;
+    },
+
+    async loadTopics() {
+      let page = this.getStoredPage();
+      let pagesRead = 0;
+      const seen = new Set();
+      const topicsToRead = [];
+
+      while (topicsToRead.length < this.config.maxTopics && pagesRead < this.config.maxPagesPerLoad) {
+        let data;
+        try {
+          data = await this.fetchJson(`${location.origin}/latest.json?page=${page}`);
+        } catch (error) {
+          console.warn("[uscardforum-X] Auto Read failed to fetch latest topics:", error);
+          break;
+        }
+
+        const topics = data?.topic_list?.topics || [];
+        if (!topics.length) {
+          page = 0;
+          break;
+        }
+
+        for (const topic of topics) {
+          if (!this.isUsableTopic(topic, seen)) continue;
+          seen.add(Number(topic.id));
+          topicsToRead.push(topic);
+          if (topicsToRead.length >= this.config.maxTopics) break;
+        }
+
+        page += 1;
+        pagesRead += 1;
+        this.storeSet("page", page);
+
+        if (topicsToRead.length < this.config.maxTopics) await this.sleep(this.config.fetchDelay);
+      }
+
+      this.storeSet("page", page);
+      return topicsToRead;
+    },
+
+    async goNext() {
+      if (!this.isEnabled() || this.navigating) return;
+      this.navigating = true;
+
+      let queue = this.parseQueue();
+      if (!queue.length) queue = await this.loadTopics();
+
+      while (queue.length) {
+        const next = queue.shift();
+        this.storeSet("queue", JSON.stringify(queue));
+
+        const topicId = Number(next?.id);
+        if (!Number.isFinite(topicId)) continue;
+
+        const post = this.toPositiveInt(next.last_read_post_number, 1);
+        setTimeout(() => {
+          location.assign(`${location.origin}/t/${topicId}/${post}`);
+        }, this.config.jumpDelay);
+        return;
+      }
+
+      console.warn("[uscardforum-X] Auto Read found no readable topics");
+      this.storeRemove("queue");
+      this.navigating = false;
+    },
+
+    startScroll() {
+      if (this.scrollStarted || !this.isEnabled()) return;
+      this.scrollStarted = true;
+
+      let timer = 0;
+      let finishing = false;
+
+      const stop = () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = 0;
+        }
+      };
+
+      const schedule = () => {
+        stop();
+        timer = setTimeout(step, this.config.scrollInterval);
+      };
+
+      const finishWhenStable = async () => {
+        if (finishing) return;
+        finishing = true;
+        stop();
+
+        await this.sleep(this.config.bottomSettleDelay);
+        if (!this.isEnabled()) {
+          this.scrollStarted = false;
+          finishing = false;
+          return;
+        }
+
+        if (!this.isAtBottom()) {
+          finishing = false;
+          schedule();
+          return;
+        }
+
+        await this.sleep(this.config.jumpDelay);
+        if (!this.isEnabled()) {
+          this.scrollStarted = false;
+          finishing = false;
+          return;
+        }
+
+        this.goNext();
+      };
+
+      const step = () => {
+        if (!this.isEnabled()) {
+          this.scrollStarted = false;
+          stop();
+          return;
+        }
+
+        if (document.hidden) {
+          schedule();
+          return;
+        }
+
+        window.scrollBy(0, this.config.scrollStep);
+
+        if (this.isAtBottom()) {
+          finishWhenStable();
+          return;
+        }
+
+        schedule();
+      };
+
+      window.addEventListener("beforeunload", stop, { once: true });
+      schedule();
     },
   };
 
@@ -958,5 +1256,9 @@
 
   if (trustLevelEnabled) {
     TrustLevelModule.init();
+  }
+
+  if (autoReadEnabled) {
+    AutoReadModule.init();
   }
 })();

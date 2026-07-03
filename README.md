@@ -16,6 +16,7 @@ Private userscript for [US Card Forum](https://www.uscardforum.com/).
 - server-side Ignore from user cards
 - Trust Level upgrade or retention gap shown inside native profile stats
 - Cloudflare Challenge helper and manual trigger
+- Auto Read for slower hands-free topic reading
 - Chinese/English script menu switching
 
 ## Modules
@@ -24,7 +25,8 @@ Private userscript for [US Card Forum](https://www.uscardforum.com/).
 | --- | --- | --- |
 | Block Users | Adds an Ignore button to Discourse user cards | Topic/user-card interactions only |
 | Next-Level Gap | Rewrites native profile summary stats as `current/target` | `/u/{username}/summary` only |
-| Cloudflare Shield | Redirects known 403/reaction failure dialogs to `/challenge` | Watches Discourse dialogs |
+| Cloudflare Shield | Redirects known 403/reaction failure dialogs to `/challenge`; the same menu row can force-trigger it when disabled | Watches Discourse dialogs |
+| Auto Read | Reads topics from `/latest.json`, scrolls topic pages, and moves to the next topic | Start pages and topic pages only; disabled by default |
 | English Panel / 中文面板 | Switches this userscript's own menu/button text | Tampermonkey menu |
 
 Enabled modules are marked with a green check in Tampermonkey's menu, for example:
@@ -33,8 +35,8 @@ Enabled modules are marked with a green check in Tampermonkey's menu, for exampl
 ✅ Block Users
 ✅ Next-Level Gap
 ✅ Cloudflare Shield
+Auto Read
 ✅ English Panel
-Force Cloudflare Shield
 ```
 
 ## Install
@@ -85,7 +87,13 @@ The automatic module watches for known Discourse failure dialogs such as reactio
 /challenge?redirect={current_page}
 ```
 
-The Tampermonkey menu item `Force Cloudflare Shield` / `强制触发Cloudflare盾` immediately enables the module and redirects to the Challenge page.
+When the Cloudflare row is enabled, it shows `✅ Cloudflare Shield` and clicking it turns the automatic watcher off. When disabled, the same row shows `Force Cloudflare Shield`; clicking it immediately enables the module and redirects to the Challenge page.
+
+### Auto Read
+
+`Auto Read` is disabled by default. After enabling it from the Tampermonkey menu, open the forum homepage, latest/new/unread/top/category pages, or a topic page.
+
+The module has no floating controls. It scrolls topic pages about 20% slower than the reference script and then jumps to the next topic from the current `/latest.json` queue.
 
 ## Star Trend
 
