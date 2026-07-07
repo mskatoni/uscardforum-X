@@ -2,9 +2,9 @@
 // @name         uscardforum-X
 // @name:zh-CN   美卡论坛 X
 // @namespace    https://github.com/mskatoni/uscardforum-X
-// @version      0.4.1
-// @description  美卡论坛增强脚本：用户卡服务器端拉黑、等级升级差距、Cloudflare Challenge 触发、自动阅读、中英文脚本面板切换。
-// @description:en  US Card Forum enhancer: server-side user ignore, Trust Level gap, Cloudflare Challenge helper, Auto Read, and bilingual script menu.
+// @version      0.4.11
+// @description  美卡论坛增强脚本：用户卡服务器端拉黑、等级升级差距、短回复图片补全、自动阅读点赞测试、Cloudflare Challenge 触发、自动阅读、中英文脚本面板切换。
+// @description:en  US Card Forum enhancer: server-side user ignore, Trust Level gap, short-reply image padding, Auto Read like testing, Cloudflare Challenge helper, Auto Read, and bilingual script menu.
 // @author       mskatoni
 // @match        https://www.uscardforum.com/*
 // @match        https://uscardforum.com/*
@@ -30,6 +30,7 @@
     hardIgnoreEnabled: "hardIgnore.enabled",
     trustLevelEnabled: "trustLevel.enabled",
     autoReadEnabled: "autoRead.enabled",
+    likeAssistEnabled: "likeAssist.enabled",
     language: "ui.language",
   };
 
@@ -124,9 +125,14 @@
       localeMenu: "中文面板",
       hardIgnoreMenu: "拉黑用户",
       trustLevelMenu: "下一级距离",
+      likeAssistMenu: "点赞可见帖子",
+      likeAssistToggleMenu: "自动点赞测试",
       challengeMenu: "Cloudflare盾",
       autoReadMenu: "自动阅读",
       alreadyOnChallenge: "已在 Cloudflare Challenge 页面，无需重复跳转。",
+      noLikeTargets: "没有找到当前可见且未点赞的帖子。",
+      likeAssistDone: (liked, total) => `已尝试点赞 ${liked}/${total} 个当前可见帖子。`,
+      likeAssistStoppedByLimit: "检测到点赞上限弹窗，已暂停自动点赞。",
       hardIgnoreButton: (username) => `拉黑 @${username}`,
       hardIgnoring: "拉黑中...",
       hardIgnored: (username) => `已拉黑 @${username}`,
@@ -160,9 +166,14 @@
       localeMenu: "English Panel",
       hardIgnoreMenu: "Block Users",
       trustLevelMenu: "Next-Level Gap",
+      likeAssistMenu: "Like Visible Posts",
+      likeAssistToggleMenu: "Auto Like Test",
       challengeMenu: "Cloudflare Shield",
       autoReadMenu: "Auto Read",
       alreadyOnChallenge: "Already on the Cloudflare Challenge page.",
+      noLikeTargets: "No visible unliked posts found.",
+      likeAssistDone: (liked, total) => `Tried liking ${liked}/${total} visible posts.`,
+      likeAssistStoppedByLimit: "Like limit dialog detected. Auto Like has been paused.",
       hardIgnoreButton: (username) => `Ignore @${username}`,
       hardIgnoring: "Ignoring...",
       hardIgnored: (username) => `Ignored @${username}`,
@@ -198,11 +209,14 @@
   const hardIgnoreEnabled = getSetting(SETTINGS.hardIgnoreEnabled, legacyHardIgnoreEnabled);
   const trustLevelEnabled = getSetting(SETTINGS.trustLevelEnabled, true);
   const autoReadEnabled = getSetting(SETTINGS.autoReadEnabled, false);
+  const likeAssistEnabled = getSetting(SETTINGS.likeAssistEnabled, false);
   const language = getSetting(SETTINGS.language, "zh") === "en" ? "en" : "zh";
   const T = TEXTS[language];
 
   registerToggle(T.hardIgnoreMenu, SETTINGS.hardIgnoreEnabled, hardIgnoreEnabled);
   registerToggle(T.trustLevelMenu, SETTINGS.trustLevelEnabled, trustLevelEnabled);
+  registerMenu(T.likeAssistMenu, () => LikeAssistModule.likeVisiblePosts());
+  registerToggle(T.likeAssistToggleMenu, SETTINGS.likeAssistEnabled, likeAssistEnabled);
   registerMenu(T.challengeMenu, () => ChallengeModule.forceChallenge());
   registerToggle(T.autoReadMenu, SETTINGS.autoReadEnabled, autoReadEnabled);
   registerMenu(toggleLabel(T.localeMenu, true), () => {
@@ -542,10 +556,13 @@
       maxPagesPerLoad: 10,
       maxPostsPerTopic: 1000,
       scrollStep: 30,
-      scrollInterval: 48,
+      scrollInterval: 50,
+      likeScrollStep: 18,
+      likeScrollInterval: 180,
       fetchDelay: 600,
       jumpDelay: 2400,
       bottomSettleDelay: 2160,
+      reactionSettleDelay: 360,
       startDelay: 1440,
       maxRetry: 3,
     },
@@ -567,6 +584,18 @@
 
     isEnabled() {
       return getSetting(SETTINGS.autoReadEnabled, false) === true;
+    },
+
+    isLikePaced() {
+      return LikeAssistModule.isAutoEnabled();
+    },
+
+    getScrollStep() {
+      return this.isLikePaced() ? this.config.likeScrollStep : this.config.scrollStep;
+    },
+
+    getScrollInterval() {
+      return this.isLikePaced() ? this.config.likeScrollInterval : this.config.scrollInterval;
     },
 
     storeKey(key) {
@@ -764,7 +793,7 @@
 
       const schedule = () => {
         stop();
-        timer = setTimeout(step, this.config.scrollInterval);
+        timer = setTimeout(step, this.getScrollInterval());
       };
 
       const finishWhenStable = async () => {
@@ -795,7 +824,7 @@
         this.goNext();
       };
 
-      const step = () => {
+      const step = async () => {
         if (!this.isEnabled()) {
           this.scrollStarted = false;
           stop();
@@ -807,7 +836,18 @@
           return;
         }
 
-        window.scrollBy(0, this.config.scrollStep);
+        const likePaced = this.isLikePaced();
+        if (likePaced) {
+          await LikeAssistModule.likeVisiblePostsDuringAutoRead();
+          await this.sleep(this.config.reactionSettleDelay);
+        }
+
+        window.scrollBy(0, this.getScrollStep());
+
+        if (likePaced) {
+          await this.sleep(this.config.reactionSettleDelay);
+          await LikeAssistModule.likeVisiblePostsDuringAutoRead();
+        }
 
         if (this.isAtBottom()) {
           finishWhenStable();
@@ -822,11 +862,381 @@
     },
   };
 
+  const LikeAssistModule = {
+    running: false,
+    autoRunning: false,
+    autoSuspended: false,
+    lastAutoRun: 0,
+    autoTimer: 0,
+    limitObserver: null,
+    autoSeenPosts: new Set(),
+    config: {
+      clickDelay: 820,
+      maxButtonsPerRun: 8,
+      autoRunInterval: 900,
+      autoMaxButtonsPerTick: 3,
+      limitDialogPattern: /分享很多爱|24\s*小时点赞上限|每日点赞上限|再次点赞|rate[_ -]?limit|too many likes|like limit/i,
+    },
+
+    init() {
+      if (!this.isAutoConfigured()) return;
+
+      this.installLimitObserver();
+      if (!this.isAutoEnabled()) return;
+
+      const schedule = () => this.scheduleAutoLike();
+      window.addEventListener("scroll", schedule, { passive: true });
+      window.addEventListener("resize", schedule, { passive: true });
+      window.addEventListener("focus", schedule);
+
+      setTimeout(schedule, 1200);
+      setTimeout(schedule, 3600);
+    },
+
+    async likeVisiblePosts() {
+      if (this.running) return;
+      if (this.hasLikeLimitDialog()) {
+        this.suspendAutoLike();
+        alert(T.likeAssistStoppedByLimit);
+        return;
+      }
+      this.running = true;
+
+      try {
+        const targets = this.findVisibleLikeButtons().slice(0, this.config.maxButtonsPerRun);
+        if (!targets.length) {
+          alert(T.noLikeTargets);
+          return;
+        }
+
+        let clicked = 0;
+        for (const target of targets) {
+          if (!target.isConnected || !this.isVisibleInViewport(target) || this.isAlreadyLiked(target)) {
+            continue;
+          }
+
+          target.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
+          await this.sleep(80);
+
+          if (!target.isConnected || !this.isVisibleInViewport(target) || this.isAlreadyLiked(target)) {
+            continue;
+          }
+
+          if (!this.triggerReactionButton(target)) {
+            continue;
+          }
+          clicked += 1;
+          await this.sleep(this.config.clickDelay);
+          if (this.hasLikeLimitDialog()) {
+            this.suspendAutoLike();
+            break;
+          }
+        }
+
+        alert(clicked ? T.likeAssistDone(clicked, targets.length) : T.noLikeTargets);
+      } finally {
+        this.running = false;
+      }
+    },
+
+    async likeVisiblePostsDuringAutoRead() {
+      if (!this.isAutoEnabled() || this.autoRunning || document.hidden) return;
+
+      const now = Date.now();
+      if (now - this.lastAutoRun < this.config.autoRunInterval) return;
+      this.lastAutoRun = now;
+      this.autoRunning = true;
+
+      try {
+        const targets = this.findVisibleLikeButtons().slice(0, this.config.autoMaxButtonsPerTick);
+
+        for (const target of targets) {
+          if (this.hasLikeLimitDialog()) {
+            this.suspendAutoLike();
+            break;
+          }
+          const key = this.getPostKey(target);
+          if (key && this.autoSeenPosts.has(key)) continue;
+          if (!target.isConnected || !this.isVisibleInViewport(target) || this.isAlreadyLiked(target)) {
+            continue;
+          }
+          if (!this.triggerReactionButton(target)) {
+            continue;
+          }
+          if (key) this.autoSeenPosts.add(key);
+          await this.sleep(this.config.clickDelay);
+          if (this.hasLikeLimitDialog()) {
+            this.suspendAutoLike();
+            break;
+          }
+        }
+      } finally {
+        this.autoRunning = false;
+      }
+    },
+
+    scheduleAutoLike() {
+      if (!this.isAutoEnabled()) return;
+      clearTimeout(this.autoTimer);
+      this.autoTimer = setTimeout(() => this.likeVisiblePostsDuringAutoRead(), 180);
+    },
+
+    isAutoConfigured() {
+      return getSetting(SETTINGS.likeAssistEnabled, false) === true && getSetting(SETTINGS.autoReadEnabled, false) === true;
+    },
+
+    isAutoEnabled() {
+      if (!this.isAutoConfigured() || this.autoSuspended) return false;
+      if (this.hasLikeLimitDialog()) {
+        this.suspendAutoLike();
+        return false;
+      }
+      return true;
+    },
+
+    suspendAutoLike() {
+      if (this.autoSuspended) return;
+      this.autoSuspended = true;
+      clearTimeout(this.autoTimer);
+      this.autoTimer = 0;
+      console.warn(`[uscardforum-X] ${T.likeAssistStoppedByLimit}`);
+    },
+
+    installLimitObserver() {
+      const root = document.body || document.documentElement;
+      if (!root || this.limitObserver) return;
+
+      this.limitObserver = new MutationObserver(() => {
+        if (this.hasLikeLimitDialog()) this.suspendAutoLike();
+      });
+      this.limitObserver.observe(root, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+
+      if (this.hasLikeLimitDialog()) this.suspendAutoLike();
+    },
+
+    hasLikeLimitDialog() {
+      const nodes = Array.from(
+        document.querySelectorAll(
+          ".modal, .d-modal, .dialog-container, .dialog-body, .bootbox, .alert-error, .toast, [role='dialog']",
+        ),
+      );
+      return nodes.some((node) => {
+        if (!this.isVisibleNode(node)) return false;
+        return this.config.limitDialogPattern.test(safeText(node.textContent));
+      });
+    },
+
+    isVisibleNode(node) {
+      if (!node?.isConnected || node.hidden || node.getAttribute("aria-hidden") === "true") return false;
+      const style = window.getComputedStyle(node);
+      if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
+      const rect = node.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    },
+
+    findVisibleLikeButtons() {
+      const seenPosts = new Set();
+      const buttons = Array.from(
+        document.querySelectorAll(
+          ".discourse-reactions-actions.can-toggle-reaction:not(.my-post):not(.has-reacted):not(.has-used-main-reaction) .discourse-reactions-reaction-button",
+        ),
+      );
+      return buttons.filter((button) => {
+        if (this.isAlreadyLiked(button)) return false;
+        if (!this.isVisibleInViewport(button)) return false;
+
+        const postKey = this.getPostKey(button);
+        if (postKey) {
+          if (seenPosts.has(postKey)) return false;
+          seenPosts.add(postKey);
+        }
+
+        return true;
+      });
+    },
+
+    getPostRoot(node) {
+      return node.closest?.("article[data-post-id], [data-post-id].topic-post, .topic-post, [id^='post_']");
+    },
+
+    getReactionStateRoot(node) {
+      return node.closest?.(".discourse-reactions-actions");
+    },
+
+    getPostKey(node) {
+      const post = this.getPostRoot(node);
+      return post?.getAttribute("data-post-id") || post?.id || "";
+    },
+
+    isAlreadyLiked(node) {
+      const stateClass = safeText(this.getReactionStateRoot(node)?.className).toLowerCase();
+      return /\bmy-post\b|\bhas-reacted\b|\bhas-used-main-reaction\b/.test(stateClass);
+    },
+
+    isVisibleInViewport(node) {
+      const rect = node.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return false;
+      const style = window.getComputedStyle(node);
+      if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
+      return rect.bottom > 0 && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth;
+    },
+
+    triggerReactionButton(node) {
+      const target = node.closest?.(".discourse-reactions-reaction-button") || node;
+      if (!target || !target.isConnected) return false;
+
+      if (this.shouldUseTouch() && this.dispatchTouchTap(target)) {
+        return true;
+      }
+
+      target.click();
+      return true;
+    },
+
+    shouldUseTouch() {
+      return (
+        navigator.maxTouchPoints > 0 ||
+        window.matchMedia?.("(pointer: coarse)")?.matches ||
+        document.documentElement.classList.contains("mobile-view")
+      );
+    },
+
+    dispatchTouchTap(target) {
+      if (typeof TouchEvent !== "function" || typeof Touch !== "function") return false;
+
+      try {
+        const rect = target.getBoundingClientRect();
+        const clientX = Math.round(rect.left + rect.width / 2);
+        const clientY = Math.round(rect.top + rect.height / 2);
+        const touch = new Touch({
+          identifier: Date.now(),
+          target,
+          clientX,
+          clientY,
+          screenX: Math.round(window.screenX + clientX),
+          screenY: Math.round(window.screenY + clientY),
+          pageX: Math.round(window.scrollX + clientX),
+          pageY: Math.round(window.scrollY + clientY),
+          radiusX: 2,
+          radiusY: 2,
+          rotationAngle: 0,
+          force: 0.5,
+        });
+
+        target.dispatchEvent(
+          new TouchEvent("touchstart", {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            touches: [touch],
+            targetTouches: [touch],
+            changedTouches: [touch],
+          }),
+        );
+        target.dispatchEvent(
+          new TouchEvent("touchend", {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            touches: [],
+            targetTouches: [],
+            changedTouches: [touch],
+          }),
+        );
+        return true;
+      } catch (_) {
+        return false;
+      }
+    },
+
+    sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    },
+  };
+
+  const ComposerPaddingModule = {
+    paddingImage: "![image|72x72](https://www.nodeseek.com/static/image/sticker/xhj/015.gif)",
+    stickerRegex: /:[a-zA-Z0-9_\-+]+:/g,
+    quoteRegex: /\[quote(?:=[^\]]+)?\][\s\S]*?\[\/quote\]/gi,
+
+    init() {
+      document.addEventListener("click", this.onDocumentClick.bind(this), true);
+    },
+
+    onDocumentClick(event) {
+      if (!this.isComposerSubmit(event.target)) return;
+
+      const textarea = document.querySelector("textarea.d-editor-input");
+      if (!textarea) return;
+
+      const originalValue = textarea.value;
+      if (this.isSingleSticker(originalValue)) return;
+
+      const effectiveLength = this.calculateEffectiveLength(originalValue);
+      if (effectiveLength <= 0 || effectiveLength >= 4) return;
+
+      const paddingNeeded = 4 - effectiveLength;
+      textarea.value = `${originalValue}\n${this.paddingImage.repeat(paddingNeeded)}`;
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    },
+
+    isComposerSubmit(target) {
+      const node = target?.closest?.("button, [role='button'], [class*='create']");
+      if (!node) return false;
+
+      const className = safeText(node.className);
+      if (/\bcreate\b/i.test(className) || className.toLowerCase().includes("create")) return true;
+
+      const label = [
+        node.getAttribute("aria-label"),
+        node.getAttribute("title"),
+        node.textContent,
+      ]
+        .map((value) => safeText(value).trim())
+        .filter(Boolean)
+        .join(" ");
+
+      return /reply|create topic|回复|发布|创建|提交/i.test(label);
+    },
+
+    stripQuotes(text) {
+      let next = safeText(text);
+      let previous;
+      do {
+        previous = next;
+        next = next.replace(this.quoteRegex, "");
+      } while (next !== previous);
+      return next;
+    },
+
+    calculateEffectiveLength(text) {
+      return this.stripQuotes(text).trim().replace(this.stickerRegex, "S").length;
+    },
+
+    isSingleSticker(text) {
+      const withoutQuotes = this.stripQuotes(text).trim();
+      const matches = withoutQuotes.match(this.stickerRegex);
+      return Boolean(matches && matches.length === 1 && matches[0] === withoutQuotes);
+    },
+  };
+
   const TrustLevelModule = {
     styleReady: false,
     routeTimer: null,
+    summaryObserver: null,
+    summaryObserverRoot: null,
+    summaryObserverOptions: {
+      childList: true,
+      subtree: true,
+    },
+    summaryPaintTimer: 0,
     lastSummaryPath: "",
     lastSummaryRun: 0,
+    lastSummaryResult: null,
     hiddenPeriodDays: 100,
     requirements: {
       0: {
@@ -876,6 +1286,7 @@
     init() {
       this.removeLegacyTrustLevelUi();
       this.installRouteWatcher();
+      this.installSummaryDomWatcher();
       this.maybeEnhanceSummaryPage();
     },
 
@@ -929,6 +1340,34 @@
         return result;
       };
       window.addEventListener("popstate", check);
+    },
+
+    installSummaryDomWatcher() {
+      const root = document.body || document.documentElement;
+      if (!root || this.summaryObserver) return;
+
+      this.summaryObserverRoot = root;
+      this.summaryObserver = new MutationObserver(() => {
+        if (!this.isSummaryPage()) return;
+
+        if (this.lastSummaryResult) {
+          this.scheduleSummaryRepaint();
+          return;
+        }
+
+        clearTimeout(this.routeTimer);
+        this.routeTimer = setTimeout(() => this.maybeEnhanceSummaryPage(), 250);
+      });
+
+      this.summaryObserver.observe(root, this.summaryObserverOptions);
+    },
+
+    scheduleSummaryRepaint() {
+      clearTimeout(this.summaryPaintTimer);
+      this.summaryPaintTimer = setTimeout(() => {
+        if (!this.isSummaryPage() || !this.lastSummaryResult) return;
+        this.paintNativeSummaryStats(this.lastSummaryResult);
+      }, 120);
     },
 
     isSummaryPage() {
@@ -1120,11 +1559,19 @@
     },
 
     maybeEnhanceSummaryPage() {
-      if (!this.isSummaryPage()) return;
+      if (!this.isSummaryPage()) {
+        this.lastSummaryPath = "";
+        this.lastSummaryResult = null;
+        return;
+      }
       this.removeLegacyTrustLevelUi();
       const path = location.pathname + location.search;
-      if (this.lastSummaryPath === path) return;
+      if (this.lastSummaryPath === path) {
+        if (this.lastSummaryResult) this.scheduleSummaryRepaint();
+        return;
+      }
       this.lastSummaryPath = path;
+      this.lastSummaryResult = null;
       const username = this.getSummaryUsername();
       if (!username) return;
       this.injectStyle();
@@ -1133,12 +1580,14 @@
       this.loadProgress(username)
         .then((result) => {
           if (this.lastSummaryRun !== runId) return;
+          this.lastSummaryResult = result;
           this.paintNativeSummaryStats(result);
         })
         .catch((error) => console.warn("[uscardforum-X] trust level summary enhance failed:", error));
     },
 
     paintNativeSummaryStats(result, retry = 0) {
+      if (this.summaryObserver) this.summaryObserver.disconnect();
       let painted = 0;
       this.removeExtraNativeStats();
 
@@ -1163,6 +1612,11 @@
       if (painted === 0 && retry < 10) {
         setTimeout(() => this.paintNativeSummaryStats(result, retry + 1), 350);
       }
+      setTimeout(() => {
+        if (this.summaryObserver && this.summaryObserverRoot?.isConnected) {
+          this.summaryObserver.observe(this.summaryObserverRoot, this.summaryObserverOptions);
+        }
+      }, 0);
     },
 
     removeExtraNativeStats() {
@@ -1247,4 +1701,7 @@
   if (autoReadEnabled) {
     AutoReadModule.init();
   }
+
+  LikeAssistModule.init();
+  ComposerPaddingModule.init();
 })();

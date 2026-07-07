@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.4.11
+
+- Restore normal Auto Read speed to `30px / 50ms` when Auto Like Test is not active.
+- Keep Auto Like Test on the slower `18px / 180ms` reading-paced scroll.
+- Pause Auto Like Test when Discourse shows the 24-hour like-limit dialog, while leaving Auto Read running.
+
+## 0.4.10
+
+- Slow Auto Read from the previous fast sweep to a reading-paced scroll so Discourse has time to mount reaction buttons.
+- Let Auto Read run the Like Assist scan before and after each scroll step, with a short settle delay around the movement.
+- Shorten the auto-like scan interval while increasing the per-click delay to avoid skipping newly visible posts.
+
+## 0.4.9
+
+- Simplify Like Assist to the official Discourse Reactions action wrapper selector.
+- Use the mobile/touch `touchstart` + `touchend` path required by Discourse Reactions on touch/mobile views, with a plain click fallback for desktop.
+- Mark auto-like posts as seen only after a trigger is actually sent.
+
+## 0.4.8
+
+- Match the Discourse Reactions wrapper used by the forum itself: `.discourse-reactions-reaction-button`.
+- Use the surrounding `.discourse-reactions-actions` state to skip own posts and already-reacted posts before clicking.
+
+## 0.4.7
+
+- Make `Auto Like Test` trigger from actual page scroll/focus events as well as the Auto Read loop.
+- Add delayed first-screen checks so Discourse posts mounted after page load can still be liked during testing.
+
+## 0.4.6
+
+- Align Like helpers with US Card Forum's Discourse Reactions plugin button class from HAR captures.
+- Skip logged-out reaction prompts such as `请注册或登录以点赞此帖子` so tests do not open the login modal by mistake.
+- Expand already-reacted detection for selected/reaction-active states.
+
+## 0.4.5
+
+- Add an `Auto Like Test` toggle that runs only together with Auto Read.
+- During Auto Read scrolling, throttle mouse-style clicks on visible native Like buttons and de-duplicate posts on the current page.
+- Keep the one-shot `Like Visible Posts` command for manual testing.
+
+## 0.4.4
+
+- Add a menu-triggered Like Visible Posts helper that simulates mouse events on visible native Like buttons.
+- Limit each run to currently visible, unliked Like buttons and keep it separate from Auto Read.
+- Update bilingual docs for the new like helper.
+
+## 0.4.3
+
+- Fix Trust Level progress not appearing on cold external links directly opened at `/u/{username}/summary`.
+- Repaint native summary stats when Discourse mounts the profile DOM after the userscript has already loaded progress data.
+
+## 0.4.2
+
+- Add short composer padding: when a reply or topic body has 1-3 effective characters, append the configured image Markdown before submit.
+- Ignore quoted text while counting, count `:sticker:` tokens as one character, and skip padding when the whole reply is exactly one sticker.
+- Update bilingual docs for the new composer helper.
+
 ## 0.4.1
 
 - Change `Cloudflare盾` / `Cloudflare Shield` to a one-time Challenge trigger without a green check mark.

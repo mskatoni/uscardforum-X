@@ -16,6 +16,9 @@ Install from Greasy Fork: [uscardforum-X](https://greasyfork.org/en/scripts/5854
 
 - server-side Ignore from user cards
 - Trust Level upgrade or retention gap shown inside native profile stats
+- short composer padding with image Markdown when a reply is under four effective characters
+- menu-triggered native reaction triggers on visible Like buttons
+- authorized-test Auto Like mode that clicks visible Like buttons while Auto Read scrolls
 - one-click Cloudflare Challenge trigger
 - Auto Read for slower hands-free topic reading
 - Chinese/English script menu switching
@@ -26,6 +29,9 @@ Install from Greasy Fork: [uscardforum-X](https://greasyfork.org/en/scripts/5854
 | --- | --- | --- |
 | Block Users | Adds an Ignore button to Discourse user cards | Topic/user-card interactions only |
 | Next-Level Gap | Rewrites native profile summary stats as `current/target` | `/u/{username}/summary` only |
+| Short Reply Padding | Appends image Markdown before submit when a composer body has 1-3 effective characters | Discourse composer submit buttons |
+| Like Visible Posts | Simulates mouse clicks on visible native Like buttons that are not already liked | Tampermonkey menu command; one immediate run on the current page |
+| Auto Like Test | Throttles native reaction triggers on a few visible Like buttons while Auto Read scrolls | Requires `Auto Read`; disabled by default |
 | Cloudflare Shield | One-time redirect to `/challenge?redirect={current_page}` | Tampermonkey menu command only |
 | Auto Read | Reads topics from `/latest.json`, scrolls topic pages, and moves to the next topic | Start pages and topic pages only; disabled by default |
 | English Panel / 中文面板 | Switches this userscript's own menu/button text | Tampermonkey menu |
@@ -35,6 +41,8 @@ Enabled modules are marked with a green check in Tampermonkey's menu, for exampl
 ```text
 ✅ Block Users
 ✅ Next-Level Gap
+Like Visible Posts
+Auto Like Test
 Cloudflare Shield
 Auto Read
 ✅ English Panel
@@ -96,11 +104,27 @@ The menu item is a one-time trigger. It does not show a green check mark and doe
 
 Click `Cloudflare Shield` when you want to force a fresh Challenge pass.
 
+### Short Reply Padding
+
+When you submit a reply or topic with 1-3 effective characters, the script appends image Markdown so the composer passes the forum's minimum length check. Quoted text is ignored, `:sticker:` tokens count as one character, and a reply that is exactly one sticker is left untouched.
+
+### Like Visible Posts
+
+Open a topic page and click `Like Visible Posts` in the userscript menu. The script finds visible native Discourse Reactions Like buttons that are not already liked, then triggers the same button path used by the page: touch events on mobile/touch views and a plain button click on desktop views.
+
+The command runs only once when triggered from the menu, handles a small number of currently visible posts, and is not tied to `Auto Read`.
+
+### Auto Like Test
+
+`Auto Like Test` is disabled by default. It only runs when both `Auto Like Test` and `Auto Read` are enabled: while Auto Read scrolls a topic page, the script throttles checks for visible native Like buttons and triggers them through the page's own reaction button.
+
+The automatic mode does not hunt for hidden buttons or run separately from Auto Read. Each tick handles only a few currently visible posts and records handled posts on the current page to avoid repeated clicks. If Discourse shows the 24-hour like-limit dialog, Auto Like Test is paused and Auto Read continues without the like-paced slowdown.
+
 ### Auto Read
 
 `Auto Read` is disabled by default. Its Tampermonkey menu row shows a green check only when it is enabled. After enabling it, open the forum homepage, latest/new/unread/top/category pages, or a topic page.
 
-The module has no floating controls. It scrolls topic pages about 20% slower than the reference script and then jumps to the next topic from the current `/latest.json` queue.
+The module has no floating controls. Normal Auto Read scrolls at `30px / 50ms` and then jumps to the next topic from the current `/latest.json` queue. When `Auto Like Test` is also enabled, scrolling switches to the slower `18px / 180ms` pace so reaction buttons have time to mount and be triggered.
 
 ## Star Trend
 
