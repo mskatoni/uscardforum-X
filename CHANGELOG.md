@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.12
+
+- Add a `Short Reply Padding` menu toggle, enabled by default, and briefly highlight the composer when padding is inserted.
+- Throttle Trust Level hidden action-history requests with retry/backoff, page delays, and sequential hidden-stat fetches.
+- Observe profile summary DOM changes only while on `/u/{username}/summary`.
+- Remove unused Challenge auto-observer code; the module now only keeps manual Challenge triggering and Challenge 404 fallback.
+- Cache Auto Read / Auto Like enabled states and simplify scroll-height reads in the scrolling loop.
+
 ## 0.4.11
 
 - Restore normal Auto Read speed to `30px / 50ms` when Auto Like Test is not active.

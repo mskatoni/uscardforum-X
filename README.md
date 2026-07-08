@@ -18,9 +18,9 @@ Install from Greasy Fork: [uscardforum-X](https://greasyfork.org/en/scripts/5854
 - Trust Level upgrade or retention gap shown inside native profile stats
 - short composer padding with image Markdown when a reply is under four effective characters
 - menu-triggered native reaction triggers on visible Like buttons
-- authorized-test Auto Like mode that clicks visible Like buttons while Auto Read scrolls
+- authorized-test Auto Like mode that triggers visible Like buttons while Auto Read scrolls
 - one-click Cloudflare Challenge trigger
-- Auto Read for slower hands-free topic reading
+- Auto Read for hands-free topic reading
 - Chinese/English script menu switching
 
 ## Modules
@@ -29,8 +29,8 @@ Install from Greasy Fork: [uscardforum-X](https://greasyfork.org/en/scripts/5854
 | --- | --- | --- |
 | Block Users | Adds an Ignore button to Discourse user cards | Topic/user-card interactions only |
 | Next-Level Gap | Rewrites native profile summary stats as `current/target` | `/u/{username}/summary` only |
-| Short Reply Padding | Appends image Markdown before submit when a composer body has 1-3 effective characters | Discourse composer submit buttons |
-| Like Visible Posts | Simulates mouse clicks on visible native Like buttons that are not already liked | Tampermonkey menu command; one immediate run on the current page |
+| Short Reply Padding | Appends image Markdown before submit when a composer body has 1-3 effective characters | Discourse composer submit buttons; enabled by default |
+| Like Visible Posts | Triggers visible native Discourse Reactions Like buttons that are not already liked | Tampermonkey menu command; one immediate run on the current page |
 | Auto Like Test | Throttles native reaction triggers on a few visible Like buttons while Auto Read scrolls | Requires `Auto Read`; disabled by default |
 | Cloudflare Shield | One-time redirect to `/challenge?redirect={current_page}` | Tampermonkey menu command only |
 | Auto Read | Reads topics from `/latest.json`, scrolls topic pages, and moves to the next topic | Start pages and topic pages only; disabled by default |
@@ -41,6 +41,7 @@ Enabled modules are marked with a green check in Tampermonkey's menu, for exampl
 ```text
 ✅ Block Users
 ✅ Next-Level Gap
+✅ Short Reply Padding
 Like Visible Posts
 Auto Like Test
 Cloudflare Shield
@@ -92,7 +93,7 @@ The script rewrites native stats such as:
 14/10 回复不同话题 *
 ```
 
-Hidden TL3 checks are appended as native-looking stats when `user_actions.json` is accessible.
+Hidden TL3 checks are appended as native-looking stats when `user_actions.json` is accessible. Those hidden checks are fetched with retry/backoff and a small delay between action pages to avoid a burst of profile-history requests.
 
 ### Cloudflare Shield
 
@@ -106,7 +107,7 @@ Click `Cloudflare Shield` when you want to force a fresh Challenge pass.
 
 ### Short Reply Padding
 
-When you submit a reply or topic with 1-3 effective characters, the script appends image Markdown so the composer passes the forum's minimum length check. Quoted text is ignored, `:sticker:` tokens count as one character, and a reply that is exactly one sticker is left untouched.
+`Short Reply Padding` is enabled by default and can be disabled from the userscript menu. When you submit a reply or topic with 1-3 effective characters, the script appends image Markdown so the composer passes the forum's minimum length check, then briefly highlights the textarea so the edit is visible. Quoted text is ignored, `:sticker:` tokens count as one character, and a reply that is exactly one sticker is left untouched.
 
 ### Like Visible Posts
 

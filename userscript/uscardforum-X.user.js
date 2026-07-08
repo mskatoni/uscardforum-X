@@ -2,7 +2,7 @@
 // @name         uscardforum-X
 // @name:zh-CN   美卡论坛 X
 // @namespace    https://github.com/mskatoni/uscardforum-X
-// @version      0.4.11
+// @version      0.4.12
 // @description  美卡论坛增强脚本：用户卡服务器端拉黑、等级升级差距、短回复图片补全、自动阅读点赞测试、Cloudflare Challenge 触发、自动阅读、中英文脚本面板切换。
 // @description:en  US Card Forum enhancer: server-side user ignore, Trust Level gap, short-reply image padding, Auto Read like testing, Cloudflare Challenge helper, Auto Read, and bilingual script menu.
 // @author       mskatoni
@@ -29,6 +29,7 @@
   const SETTINGS = {
     hardIgnoreEnabled: "hardIgnore.enabled",
     trustLevelEnabled: "trustLevel.enabled",
+    composerPaddingEnabled: "composerPadding.enabled",
     autoReadEnabled: "autoRead.enabled",
     likeAssistEnabled: "likeAssist.enabled",
     language: "ui.language",
@@ -125,6 +126,7 @@
       localeMenu: "中文面板",
       hardIgnoreMenu: "拉黑用户",
       trustLevelMenu: "下一级距离",
+      composerPaddingMenu: "短回复补图",
       likeAssistMenu: "点赞可见帖子",
       likeAssistToggleMenu: "自动点赞测试",
       challengeMenu: "Cloudflare盾",
@@ -133,6 +135,7 @@
       noLikeTargets: "没有找到当前可见且未点赞的帖子。",
       likeAssistDone: (liked, total) => `已尝试点赞 ${liked}/${total} 个当前可见帖子。`,
       likeAssistStoppedByLimit: "检测到点赞上限弹窗，已暂停自动点赞。",
+      composerPaddingNotice: "已自动补图以满足最小字数。",
       hardIgnoreButton: (username) => `拉黑 @${username}`,
       hardIgnoring: "拉黑中...",
       hardIgnored: (username) => `已拉黑 @${username}`,
@@ -166,6 +169,7 @@
       localeMenu: "English Panel",
       hardIgnoreMenu: "Block Users",
       trustLevelMenu: "Next-Level Gap",
+      composerPaddingMenu: "Short Reply Padding",
       likeAssistMenu: "Like Visible Posts",
       likeAssistToggleMenu: "Auto Like Test",
       challengeMenu: "Cloudflare Shield",
@@ -174,6 +178,7 @@
       noLikeTargets: "No visible unliked posts found.",
       likeAssistDone: (liked, total) => `Tried liking ${liked}/${total} visible posts.`,
       likeAssistStoppedByLimit: "Like limit dialog detected. Auto Like has been paused.",
+      composerPaddingNotice: "Padding image added to meet the minimum length.",
       hardIgnoreButton: (username) => `Ignore @${username}`,
       hardIgnoring: "Ignoring...",
       hardIgnored: (username) => `Ignored @${username}`,
@@ -208,6 +213,7 @@
   const legacyHardIgnoreEnabled = getSetting("enabled", true);
   const hardIgnoreEnabled = getSetting(SETTINGS.hardIgnoreEnabled, legacyHardIgnoreEnabled);
   const trustLevelEnabled = getSetting(SETTINGS.trustLevelEnabled, true);
+  const composerPaddingEnabled = getSetting(SETTINGS.composerPaddingEnabled, true);
   const autoReadEnabled = getSetting(SETTINGS.autoReadEnabled, false);
   const likeAssistEnabled = getSetting(SETTINGS.likeAssistEnabled, false);
   const language = getSetting(SETTINGS.language, "zh") === "en" ? "en" : "zh";
@@ -215,6 +221,7 @@
 
   registerToggle(T.hardIgnoreMenu, SETTINGS.hardIgnoreEnabled, hardIgnoreEnabled);
   registerToggle(T.trustLevelMenu, SETTINGS.trustLevelEnabled, trustLevelEnabled);
+  registerToggle(T.composerPaddingMenu, SETTINGS.composerPaddingEnabled, composerPaddingEnabled);
   registerMenu(T.likeAssistMenu, () => LikeAssistModule.likeVisiblePosts());
   registerToggle(T.likeAssistToggleMenu, SETTINGS.likeAssistEnabled, likeAssistEnabled);
   registerMenu(T.challengeMenu, () => ChallengeModule.forceChallenge());
@@ -421,27 +428,6 @@
   const ChallengeModule = {
     challengePath: "/challenge",
     notFoundGuardKey: `${STORAGE_PREFIX}:challenge.notFoundGuardTs`,
-    observer: null,
-    observerTimer: null,
-    dialogSelectors: [".dialog-body", ".modal-body", ".d-modal__body"],
-    errorTexts: [
-      "403 error",
-      "该回应是很久以前创建的",
-      "reaction was created too long ago",
-      "我们无法加载该话题",
-      "You are not allowed to react",
-    ],
-
-    init() {
-      if (this.isChallengePage()) {
-        if (this.isNotFoundPage()) {
-          this.redirectFromNotFoundPage();
-        }
-        return;
-      }
-      if (this.checkAndRedirect()) return;
-      this.startObserver();
-    },
 
     isChallengePage() {
       return location.pathname.startsWith(this.challengePath);
@@ -490,20 +476,6 @@
       location.replace(target === location.href ? fallback : target);
     },
 
-    getDialogText() {
-      return this.dialogSelectors
-        .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
-        .map((node) => node.textContent || "")
-        .join("\n");
-    },
-
-    isChallengeFailure() {
-      if (this.isChallengePage()) return false;
-      const text = this.getDialogText();
-      if (!text) return false;
-      return this.errorTexts.some((needle) => text.includes(needle));
-    },
-
     buildChallengeUrl() {
       const current = location.href;
       return `${this.challengePath}?redirect=${encodeURIComponent(current)}`;
@@ -521,36 +493,11 @@
       }
       this.redirectToChallenge();
     },
-
-    checkAndRedirect(observer) {
-      if (!this.isChallengeFailure()) return false;
-      observer?.disconnect();
-      this.redirectToChallenge();
-      return true;
-    },
-
-    startObserver() {
-      const root = document.body || document.documentElement;
-      if (!root || this.observer) return;
-      this.observer = new MutationObserver((_, observer) => {
-        if (this.isChallengePage()) {
-          if (this.isNotFoundPage()) {
-            this.redirectFromNotFoundPage();
-          }
-          return;
-        }
-        this.checkAndRedirect(observer);
-      });
-      this.observer.observe(root, {
-        childList: true,
-        subtree: true,
-        characterData: true,
-      });
-    },
   };
 
   const AutoReadModule = {
     storagePrefix: `${STORAGE_PREFIX}:autoRead.`,
+    enabled: autoReadEnabled,
     config: {
       maxTopics: 100,
       maxPagesPerLoad: 10,
@@ -583,7 +530,7 @@
     },
 
     isEnabled() {
-      return getSetting(SETTINGS.autoReadEnabled, false) === true;
+      return this.enabled;
     },
 
     isLikePaced() {
@@ -654,15 +601,8 @@
     },
 
     getScrollHeight() {
-      const body = document.body;
-      const root = document.documentElement;
-      return Math.max(
-        body?.scrollHeight || 0,
-        body?.offsetHeight || 0,
-        root?.clientHeight || 0,
-        root?.scrollHeight || 0,
-        root?.offsetHeight || 0,
-      );
+      const scroller = document.scrollingElement || document.documentElement;
+      return scroller?.scrollHeight || document.body?.scrollHeight || 0;
     },
 
     isAtBottom() {
@@ -863,6 +803,7 @@
   };
 
   const LikeAssistModule = {
+    enabled: likeAssistEnabled,
     running: false,
     autoRunning: false,
     autoSuspended: false,
@@ -982,7 +923,7 @@
     },
 
     isAutoConfigured() {
-      return getSetting(SETTINGS.likeAssistEnabled, false) === true && getSetting(SETTINGS.autoReadEnabled, false) === true;
+      return this.enabled && AutoReadModule.isEnabled();
     },
 
     isAutoEnabled() {
@@ -1162,9 +1103,24 @@
     paddingImage: "![image|72x72](https://www.nodeseek.com/static/image/sticker/xhj/015.gif)",
     stickerRegex: /:[a-zA-Z0-9_\-+]+:/g,
     quoteRegex: /\[quote(?:=[^\]]+)?\][\s\S]*?\[\/quote\]/gi,
+    flashClass: "uscf-composer-padding-flash",
+    flashTimer: 0,
+    styleReady: false,
 
     init() {
       document.addEventListener("click", this.onDocumentClick.bind(this), true);
+    },
+
+    injectStyle() {
+      if (this.styleReady) return;
+      this.styleReady = true;
+      addStyle(`
+        textarea.${this.flashClass} {
+          outline: 2px solid #f0b429 !important;
+          box-shadow: 0 0 0 3px rgba(240, 180, 41, 0.22) !important;
+          transition: outline-color 180ms ease, box-shadow 180ms ease;
+        }
+      `);
     },
 
     onDocumentClick(event) {
@@ -1182,6 +1138,7 @@
       const paddingNeeded = 4 - effectiveLength;
       textarea.value = `${originalValue}\n${this.paddingImage.repeat(paddingNeeded)}`;
       textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      this.flashTextarea(textarea);
     },
 
     isComposerSubmit(target) {
@@ -1222,6 +1179,16 @@
       const matches = withoutQuotes.match(this.stickerRegex);
       return Boolean(matches && matches.length === 1 && matches[0] === withoutQuotes);
     },
+
+    flashTextarea(textarea) {
+      this.injectStyle();
+      textarea.title = T.composerPaddingNotice;
+      textarea.classList.add(this.flashClass);
+      clearTimeout(this.flashTimer);
+      this.flashTimer = setTimeout(() => {
+        textarea.classList.remove(this.flashClass);
+      }, 1200);
+    },
   };
 
   const TrustLevelModule = {
@@ -1229,6 +1196,7 @@
     routeTimer: null,
     summaryObserver: null,
     summaryObserverRoot: null,
+    summaryObserverActive: false,
     summaryObserverOptions: {
       childList: true,
       subtree: true,
@@ -1238,6 +1206,12 @@
     lastSummaryRun: 0,
     lastSummaryResult: null,
     hiddenPeriodDays: 100,
+    config: {
+      maxRetry: 3,
+      retryDelay: 900,
+      rateLimitDelay: 2400,
+      actionPageDelay: 180,
+    },
     requirements: {
       0: {
         topics_entered: 5,
@@ -1287,6 +1261,7 @@
       this.removeLegacyTrustLevelUi();
       this.installRouteWatcher();
       this.installSummaryDomWatcher();
+      this.syncSummaryDomWatcher();
       this.maybeEnhanceSummaryPage();
     },
 
@@ -1318,6 +1293,7 @@
 
     installRouteWatcher() {
       const check = () => {
+        this.syncSummaryDomWatcher();
         clearTimeout(this.routeTimer);
         this.routeTimer = setTimeout(() => this.maybeEnhanceSummaryPage(), 180);
       };
@@ -1358,8 +1334,30 @@
         clearTimeout(this.routeTimer);
         this.routeTimer = setTimeout(() => this.maybeEnhanceSummaryPage(), 250);
       });
+    },
 
+    syncSummaryDomWatcher() {
+      if (this.isSummaryPage()) {
+        this.observeSummaryDom();
+      } else {
+        this.disconnectSummaryDom();
+      }
+    },
+
+    observeSummaryDom() {
+      const root = document.body || document.documentElement;
+      if (!root) return;
+      if (!this.summaryObserver) this.installSummaryDomWatcher();
+      if (!this.summaryObserver || this.summaryObserverActive) return;
+      this.summaryObserverRoot = root;
       this.summaryObserver.observe(root, this.summaryObserverOptions);
+      this.summaryObserverActive = true;
+    },
+
+    disconnectSummaryDom() {
+      if (!this.summaryObserver || !this.summaryObserverActive) return;
+      this.summaryObserver.disconnect();
+      this.summaryObserverActive = false;
     },
 
     scheduleSummaryRepaint() {
@@ -1384,15 +1382,36 @@
     },
 
     async fetchJson(path) {
-      const response = await fetch(path, {
-        credentials: "same-origin",
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        throw new Error(`${response.status}: ${text.slice(0, 180) || response.statusText}`);
+      let lastError;
+      for (let i = 0; i < this.config.maxRetry; i += 1) {
+        try {
+          const response = await fetch(path, {
+            credentials: "same-origin",
+            headers: { Accept: "application/json" },
+          });
+
+          if (response.status === 429 && i < this.config.maxRetry - 1) {
+            const retryAfter = Number.parseInt(response.headers.get("Retry-After") || "0", 10);
+            const wait = retryAfter > 0 ? retryAfter * 1000 : this.config.rateLimitDelay * (i + 1);
+            await this.sleep(wait);
+            continue;
+          }
+
+          if (!response.ok) {
+            const text = await response.text().catch(() => "");
+            throw new Error(`${response.status}: ${text.slice(0, 180) || response.statusText}`);
+          }
+          return response.json();
+        } catch (error) {
+          lastError = error;
+          if (i < this.config.maxRetry - 1) await this.sleep(this.config.retryDelay * (i + 1));
+        }
       }
-      return response.json();
+      throw lastError || new Error("fetch failed");
+    },
+
+    sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
     },
 
     async fetchSiteStats() {
@@ -1444,16 +1463,15 @@
         }
 
         if (hitCutoff || actions.length < pageSize) break;
+        await this.sleep(this.config.actionPageDelay);
       }
       return out;
     },
 
     async fetchHiddenStats(username) {
       const sinceTs = Date.now() - this.hiddenPeriodDays * 86400000;
-      const [likesReceived, replies] = await Promise.all([
-        this.fetchAllActions(username, 2, sinceTs),
-        this.fetchAllActions(username, 5, sinceTs),
-      ]);
+      const likesReceived = await this.fetchAllActions(username, 2, sinceTs);
+      const replies = await this.fetchAllActions(username, 5, sinceTs);
       return {
         likes_received_users: new Set(likesReceived.map((action) => action.acting_username).filter(Boolean)).size,
         likes_received_days: new Set(likesReceived.map((action) => safeText(action.created_at).slice(0, 10))).size,
@@ -1587,7 +1605,7 @@
     },
 
     paintNativeSummaryStats(result, retry = 0) {
-      if (this.summaryObserver) this.summaryObserver.disconnect();
+      this.disconnectSummaryDom();
       let painted = 0;
       this.removeExtraNativeStats();
 
@@ -1613,9 +1631,7 @@
         setTimeout(() => this.paintNativeSummaryStats(result, retry + 1), 350);
       }
       setTimeout(() => {
-        if (this.summaryObserver && this.summaryObserverRoot?.isConnected) {
-          this.summaryObserver.observe(this.summaryObserverRoot, this.summaryObserverOptions);
-        }
+        if (this.isSummaryPage()) this.observeSummaryDom();
       }, 0);
     },
 
@@ -1703,5 +1719,7 @@
   }
 
   LikeAssistModule.init();
-  ComposerPaddingModule.init();
+  if (composerPaddingEnabled) {
+    ComposerPaddingModule.init();
+  }
 })();
