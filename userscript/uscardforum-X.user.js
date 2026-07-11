@@ -2,7 +2,7 @@
 // @name         uscardforum-X
 // @name:zh-CN   美卡论坛 X
 // @namespace    https://github.com/mskatoni/uscardforum-X
-// @version      0.4.14
+// @version      0.4.15
 // @description  美卡论坛增强脚本：用户卡服务器端拉黑、等级升级差距、楼层号、短回复图片补全、自动阅读点赞测试、Cloudflare Challenge 触发、自动阅读、中英文脚本面板切换。
 // @description:en  US Card Forum enhancer: server-side user ignore, Trust Level gap, floor numbers, short-reply image padding, Auto Read like testing, Cloudflare Challenge helper, Auto Read, and bilingual script menu.
 // @author       mskatoni
