@@ -2,9 +2,9 @@
 // @name         uscardforum-X
 // @name:zh-CN   美卡论坛 X
 // @namespace    https://github.com/mskatoni/uscardforum-X
-// @version      0.4.12
-// @description  美卡论坛增强脚本：用户卡服务器端拉黑、等级升级差距、短回复图片补全、自动阅读点赞测试、Cloudflare Challenge 触发、自动阅读、中英文脚本面板切换。
-// @description:en  US Card Forum enhancer: server-side user ignore, Trust Level gap, short-reply image padding, Auto Read like testing, Cloudflare Challenge helper, Auto Read, and bilingual script menu.
+// @version      0.4.13
+// @description  美卡论坛增强脚本：用户卡服务器端拉黑、等级升级差距、楼层号、短回复图片补全、自动阅读点赞测试、Cloudflare Challenge 触发、自动阅读、中英文脚本面板切换。
+// @description:en  US Card Forum enhancer: server-side user ignore, Trust Level gap, floor numbers, short-reply image padding, Auto Read like testing, Cloudflare Challenge helper, Auto Read, and bilingual script menu.
 // @author       mskatoni
 // @match        https://www.uscardforum.com/*
 // @match        https://uscardforum.com/*
@@ -29,6 +29,7 @@
   const SETTINGS = {
     hardIgnoreEnabled: "hardIgnore.enabled",
     trustLevelEnabled: "trustLevel.enabled",
+    floorNumberEnabled: "floorNumber.enabled",
     composerPaddingEnabled: "composerPadding.enabled",
     autoReadEnabled: "autoRead.enabled",
     likeAssistEnabled: "likeAssist.enabled",
@@ -126,6 +127,7 @@
       localeMenu: "中文面板",
       hardIgnoreMenu: "拉黑用户",
       trustLevelMenu: "下一级距离",
+      floorNumberMenu: "楼层号",
       composerPaddingMenu: "短回复补图",
       likeAssistMenu: "点赞可见帖子",
       likeAssistToggleMenu: "自动点赞测试",
@@ -169,6 +171,7 @@
       localeMenu: "English Panel",
       hardIgnoreMenu: "Block Users",
       trustLevelMenu: "Next-Level Gap",
+      floorNumberMenu: "Floor Numbers",
       composerPaddingMenu: "Short Reply Padding",
       likeAssistMenu: "Like Visible Posts",
       likeAssistToggleMenu: "Auto Like Test",
@@ -213,6 +216,7 @@
   const legacyHardIgnoreEnabled = getSetting("enabled", true);
   const hardIgnoreEnabled = getSetting(SETTINGS.hardIgnoreEnabled, legacyHardIgnoreEnabled);
   const trustLevelEnabled = getSetting(SETTINGS.trustLevelEnabled, true);
+  const floorNumberEnabled = getSetting(SETTINGS.floorNumberEnabled, true);
   const composerPaddingEnabled = getSetting(SETTINGS.composerPaddingEnabled, true);
   const autoReadEnabled = getSetting(SETTINGS.autoReadEnabled, false);
   const likeAssistEnabled = getSetting(SETTINGS.likeAssistEnabled, false);
@@ -221,6 +225,7 @@
 
   registerToggle(T.hardIgnoreMenu, SETTINGS.hardIgnoreEnabled, hardIgnoreEnabled);
   registerToggle(T.trustLevelMenu, SETTINGS.trustLevelEnabled, trustLevelEnabled);
+  registerToggle(T.floorNumberMenu, SETTINGS.floorNumberEnabled, floorNumberEnabled);
   registerToggle(T.composerPaddingMenu, SETTINGS.composerPaddingEnabled, composerPaddingEnabled);
   registerMenu(T.likeAssistMenu, () => LikeAssistModule.likeVisiblePosts());
   registerToggle(T.likeAssistToggleMenu, SETTINGS.likeAssistEnabled, likeAssistEnabled);
@@ -492,6 +497,163 @@
         return;
       }
       this.redirectToChallenge();
+    },
+  };
+
+  const FloorNumberModule = {
+    markerClass: "uscf-floor-number",
+    observer: null,
+    observerRoot: null,
+    observerActive: false,
+    routeTimer: 0,
+    paintTimer: 0,
+    styleReady: false,
+    observerOptions: {
+      childList: true,
+      subtree: true,
+    },
+
+    init() {
+      this.injectStyle();
+      this.installRouteWatcher();
+      this.syncObserver();
+      this.schedulePaint();
+    },
+
+    injectStyle() {
+      if (this.styleReady) return;
+      this.styleReady = true;
+      addStyle(`
+        .${this.markerClass} {
+          display: inline-flex;
+          align-items: center;
+          margin-left: 6px;
+          padding: 1px 5px;
+          border-radius: 4px;
+          font-size: 12px;
+          font-weight: 600;
+          line-height: 1.35;
+          color: var(--primary-medium, #666);
+          background: var(--primary-low, rgba(0, 0, 0, 0.06));
+          white-space: nowrap;
+          vertical-align: middle;
+        }
+      `);
+    },
+
+    installRouteWatcher() {
+      const check = () => {
+        clearTimeout(this.routeTimer);
+        this.routeTimer = setTimeout(() => {
+          this.syncObserver();
+          this.schedulePaint();
+        }, 180);
+      };
+
+      if ("onurlchange" in window) {
+        window.addEventListener("urlchange", check);
+        return;
+      }
+
+      const pushState = history.pushState;
+      const replaceState = history.replaceState;
+      history.pushState = function (...args) {
+        const result = pushState.apply(this, args);
+        check();
+        return result;
+      };
+      history.replaceState = function (...args) {
+        const result = replaceState.apply(this, args);
+        check();
+        return result;
+      };
+      window.addEventListener("popstate", check);
+    },
+
+    isTopicPage() {
+      return /^\/t\//i.test(location.pathname);
+    },
+
+    syncObserver() {
+      if (this.isTopicPage()) {
+        this.observeTopic();
+      } else {
+        this.disconnectObserver();
+      }
+    },
+
+    observeTopic() {
+      const root = document.querySelector("#topic") || document.body || document.documentElement;
+      if (!root) return;
+
+      if (!this.observer) {
+        this.observer = new MutationObserver(() => this.schedulePaint());
+      }
+
+      if (this.observerActive && this.observerRoot === root) return;
+      this.disconnectObserver();
+      this.observerRoot = root;
+      this.observer.observe(root, this.observerOptions);
+      this.observerActive = true;
+    },
+
+    disconnectObserver() {
+      if (!this.observer || !this.observerActive) return;
+      this.observer.disconnect();
+      this.observerActive = false;
+    },
+
+    schedulePaint() {
+      clearTimeout(this.paintTimer);
+      this.paintTimer = setTimeout(() => this.paint(), 80);
+    },
+
+    paint() {
+      if (!this.isTopicPage()) return;
+
+      document.querySelectorAll(".topic-post").forEach((post) => {
+        const postNumber = this.getPostNumber(post);
+        if (!Number.isFinite(postNumber) || postNumber < 1) return;
+
+        const names = this.getNamesContainer(post);
+        if (!names) return;
+
+        const floor = postNumber - 1;
+        const text = `${floor}楼`;
+        const existing = names.querySelector(`.${this.markerClass}`);
+        if (existing) {
+          if (existing.textContent !== text) existing.textContent = text;
+          return;
+        }
+
+        names.appendChild(
+          el("span", {
+            class: this.markerClass,
+            text,
+            title: `#${postNumber}`,
+          }),
+        );
+      });
+    },
+
+    getPostNumber(post) {
+      const article = post.querySelector?.("article");
+      const raw =
+        post.getAttribute("data-post-number") ||
+        article?.getAttribute("data-post-number") ||
+        safeText(article?.id).match(/^post_(\d+)$/)?.[1] ||
+        "";
+      const value = Number.parseInt(raw, 10);
+      return Number.isFinite(value) ? value : NaN;
+    },
+
+    getNamesContainer(post) {
+      return (
+        post.querySelector(".topic-meta-data .names.trigger-user-card") ||
+        post.querySelector(".topic-meta-data .names") ||
+        post.querySelector(".names.trigger-user-card") ||
+        post.querySelector(".names")
+      );
     },
   };
 
@@ -1712,6 +1874,10 @@
 
   if (trustLevelEnabled) {
     TrustLevelModule.init();
+  }
+
+  if (floorNumberEnabled) {
+    FloorNumberModule.init();
   }
 
   if (autoReadEnabled) {
