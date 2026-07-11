@@ -2,7 +2,7 @@
 // @name         uscardforum-X
 // @name:zh-CN   美卡论坛 X
 // @namespace    https://github.com/mskatoni/uscardforum-X
-// @version      0.4.13
+// @version      0.4.14
 // @description  美卡论坛增强脚本：用户卡服务器端拉黑、等级升级差距、楼层号、短回复图片补全、自动阅读点赞测试、Cloudflare Challenge 触发、自动阅读、中英文脚本面板切换。
 // @description:en  US Card Forum enhancer: server-side user ignore, Trust Level gap, floor numbers, short-reply image padding, Auto Read like testing, Cloudflare Challenge helper, Auto Read, and bilingual script menu.
 // @author       mskatoni
@@ -527,16 +527,17 @@
         .${this.markerClass} {
           display: inline-flex;
           align-items: center;
-          margin-left: 6px;
-          padding: 1px 5px;
-          border-radius: 4px;
+          margin-left: auto;
+          padding-left: 8px;
           font-size: 12px;
           font-weight: 600;
           line-height: 1.35;
           color: var(--primary-medium, #666);
-          background: var(--primary-low, rgba(0, 0, 0, 0.06));
           white-space: nowrap;
           vertical-align: middle;
+        }
+        .topic-meta-data > .${this.markerClass} {
+          float: right;
         }
       `);
     },
@@ -615,22 +616,22 @@
         const postNumber = this.getPostNumber(post);
         if (!Number.isFinite(postNumber) || postNumber < 1) return;
 
-        const names = this.getNamesContainer(post);
-        if (!names) return;
+        const container = this.getMarkerContainer(post);
+        if (!container) return;
 
         const floor = postNumber - 1;
-        const text = `${floor}楼`;
-        const existing = names.querySelector(`.${this.markerClass}`);
+        const text = `#${floor}`;
+        const existing = container.querySelector(`:scope > .${this.markerClass}`);
         if (existing) {
           if (existing.textContent !== text) existing.textContent = text;
           return;
         }
 
-        names.appendChild(
+        container.appendChild(
           el("span", {
             class: this.markerClass,
             text,
-            title: `#${postNumber}`,
+            title: `${floor}楼`,
           }),
         );
       });
@@ -647,12 +648,11 @@
       return Number.isFinite(value) ? value : NaN;
     },
 
-    getNamesContainer(post) {
+    getMarkerContainer(post) {
       return (
-        post.querySelector(".topic-meta-data .names.trigger-user-card") ||
-        post.querySelector(".topic-meta-data .names") ||
-        post.querySelector(".names.trigger-user-card") ||
-        post.querySelector(".names")
+        post.querySelector(".topic-meta-data") ||
+        post.querySelector(".topic-avatar + div") ||
+        post.querySelector(".names")?.parentElement
       );
     },
   };
