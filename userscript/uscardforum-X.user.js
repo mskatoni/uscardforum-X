@@ -2,7 +2,7 @@
 // @name         uscardforum-X
 // @name:zh-CN   美卡论坛 X
 // @namespace    https://github.com/mskatoni/uscardforum-X
-// @version      0.4.15
+// @version      0.4.16
 // @description  美卡论坛增强脚本：用户卡服务器端拉黑、等级升级差距、楼层号、短回复图片补全、自动阅读点赞测试、Cloudflare Challenge 触发、自动阅读、中英文脚本面板切换。
 // @description:en  US Card Forum enhancer: server-side user ignore, Trust Level gap, floor numbers, short-reply image padding, Auto Read like testing, Cloudflare Challenge helper, Auto Read, and bilingual script menu.
 // @author       mskatoni
@@ -82,9 +82,11 @@
     return enabled ? `✅ ${label}` : label;
   }
 
-  function registerToggle(label, key, currentValue) {
+  function registerToggle(label, key, currentValue, onToggle) {
     registerMenu(toggleLabel(label, currentValue), () => {
-      setSetting(key, !currentValue);
+      const nextValue = !currentValue;
+      setSetting(key, nextValue);
+      onToggle?.(nextValue);
       window.location.reload();
     });
   }
@@ -228,7 +230,9 @@
   registerToggle(T.floorNumberMenu, SETTINGS.floorNumberEnabled, floorNumberEnabled);
   registerToggle(T.composerPaddingMenu, SETTINGS.composerPaddingEnabled, composerPaddingEnabled);
   registerMenu(T.likeAssistMenu, () => LikeAssistModule.likeVisiblePosts());
-  registerToggle(T.likeAssistToggleMenu, SETTINGS.likeAssistEnabled, likeAssistEnabled);
+  registerToggle(T.likeAssistToggleMenu, SETTINGS.likeAssistEnabled, likeAssistEnabled, (nextEnabled) => {
+    if (nextEnabled) LikeAssistModule.clearAutoSuspension();
+  });
   registerMenu(T.challengeMenu, () => ChallengeModule.forceChallenge());
   registerToggle(T.autoReadMenu, SETTINGS.autoReadEnabled, autoReadEnabled);
   registerMenu(toggleLabel(T.localeMenu, true), () => {
@@ -965,6 +969,7 @@
   };
 
   const LikeAssistModule = {
+    suspensionKey: `${STORAGE_PREFIX}:likeAssist.autoSuspended`,
     enabled: likeAssistEnabled,
     running: false,
     autoRunning: false,
@@ -984,6 +989,7 @@
     init() {
       if (!this.isAutoConfigured()) return;
 
+      this.autoSuspended = this.hasStoredAutoSuspension();
       this.installLimitObserver();
       if (!this.isAutoEnabled()) return;
 
@@ -1100,9 +1106,31 @@
     suspendAutoLike() {
       if (this.autoSuspended) return;
       this.autoSuspended = true;
+      try {
+        sessionStorage.setItem(this.suspensionKey, "1");
+      } catch {
+        // The in-memory suspension still protects the current page.
+      }
       clearTimeout(this.autoTimer);
       this.autoTimer = 0;
       console.warn(`[uscardforum-X] ${T.likeAssistStoppedByLimit}`);
+    },
+
+    hasStoredAutoSuspension() {
+      try {
+        return sessionStorage.getItem(this.suspensionKey) === "1";
+      } catch {
+        return false;
+      }
+    },
+
+    clearAutoSuspension() {
+      this.autoSuspended = false;
+      try {
+        sessionStorage.removeItem(this.suspensionKey);
+      } catch {
+        // Ignore storage failures; the next page will start from its in-memory state.
+      }
     },
 
     installLimitObserver() {
